@@ -17,6 +17,9 @@ const envSchema = z.object({
   ENABLE_AUTO_SYNC: z.coerce.boolean().default(false),
   EXCLUDE_SPORTS: z.coerce.boolean().default(true),
 
+  // Admin auth
+  ADMIN_API_KEY: z.string().min(1).optional(),
+
   // Server
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

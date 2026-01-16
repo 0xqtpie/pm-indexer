@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { db, markets } from "../db/index.ts";
@@ -17,6 +18,25 @@ const app = new Hono();
 
 // Middleware
 app.use("/*", cors());
+
+const requireAdminKey = async (c: Context, next: Next) => {
+  if (!config.ADMIN_API_KEY) {
+    return c.json({ error: "Admin API key not configured" }, 503);
+  }
+
+  const authHeader = c.req.header("authorization") ?? "";
+  const bearerToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : "";
+  const headerToken = c.req.header("x-admin-key") ?? "";
+  const token = bearerToken || headerToken;
+
+  if (!token || token !== config.ADMIN_API_KEY) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  await next();
+};
 
 // Health check
 app.get("/health", (c) => {
@@ -150,6 +170,9 @@ app.get("/api/markets", async (c) => {
     return c.json({ error: "Failed to list markets" }, 500);
   }
 });
+
+// Get sync status
+app.use("/api/admin/*", requireAdminKey);
 
 // Get sync status
 app.get("/api/admin/sync/status", (c) => {

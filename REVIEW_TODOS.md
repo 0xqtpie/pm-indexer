@@ -18,7 +18,7 @@
 
 ## Security and Cost Controls
 - [ ] Protect all `/api/admin/*` endpoints.
-  - [ ] Implement API key or JWT auth for admin routes.
+  - [x] Implement API key or JWT auth for admin routes.
   - [ ] Add audit logging for sync triggers and failures.
 - [ ] Restrict CORS to known origins and allowed methods/headers.
   - [ ] Make CORS configurable via environment.

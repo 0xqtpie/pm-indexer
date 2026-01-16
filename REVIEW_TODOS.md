@@ -1,75 +1,29 @@
 # Review To-Do List
 
 ## Data Correctness (Highest Priority)
-- [x] Fix "full sync" to include closed/settled markets (not open-only).
-  - [x] Update ingestion fetchers to support status filtering beyond open only.
-    - [x] Polymarket: add configurable `closed`/`archived` options or a dedicated full-sync mode.
-    - [x] Kalshi: allow fetching closed/settled markets via status filters.
-  - [x] Adjust full sync orchestration to request open+closed+settled (or all) based on mode.
-  - [x] Add tests that verify status transitions (open -> closed -> settled) are ingested.
-- [x] Ensure search payload reflects live prices/status.
-  - [x] Update Qdrant payload on every price/status change, even without re-embedding.
-  - [x] Add a fast path to refresh payload fields without re-upserting vectors.
-  - [x] Add a test that verifies price/status updates are visible via `/api/search`.
-- [x] Expand content updates beyond title/description/rules.
-  - [x] Update sync to also refresh subtitle, tags, category, closeAt, url, imageUrl.
-  - [x] Keep content hash inputs limited to title + description + rules (no tags/category/subtitle).
-  - [x] Add tests to ensure content changes trigger re-embedding when intended.
+- [x] Fix `/api/search` pagination when `sort` is not `relevance`.
+  - [x] Choose Option B: fixed-window re-ranking for sorted paging.
+  - [x] Add `SEARCH_SORT_WINDOW` config and use it when `sort!=relevance`.
+  - [x] For `sort!=relevance`, always query Qdrant with `limit=SEARCH_SORT_WINDOW` + `offset=0`, then sort + paginate in memory.
+  - [x] Return an empty page (or clear error) when `cursor.offset >= SEARCH_SORT_WINDOW`.
+  - [x] Add tests to ensure no duplication or skipped results across pages within the window.
 
-## Security and Cost Controls
-- [x] Protect all `/api/admin/*` endpoints.
-  - [x] Implement API key or JWT auth for admin routes.
-  - [x] Add audit logging for sync triggers and failures.
-- [x] Restrict CORS to known origins and allowed methods/headers.
-  - [x] Make CORS configurable via environment.
-- [x] Add rate limiting for `/api/search` to control OpenAI costs.
-  - [x] Add per-IP or per-API-key budgets.
-  - [x] Return clear error responses when limits are exceeded.
-
-## Performance Optimizations
-- [x] Replace per-row price updates with batch SQL update.
-  - [x] Implement `UPDATE ... FROM (VALUES ...)` for price/status changes.
-  - [x] Measure and compare sync duration before/after.
-- [x] Add query embedding cache.
-  - [x] Add LRU/TTL cache for query embeddings to avoid repeat OpenAI calls.
-  - [x] Add cache metrics (hits/misses).
-- [x] Reduce DB diff read size in sync.
-  - [x] Select only required columns (id, sourceId, contentHash, status, prices).
-- [x] Add guardrails for empty embeddings and short queries.
-  - [x] Short-circuit and return a clear error or fallback results.
+## Security and Observability
+- [x] Restrict `/metrics` access.
+  - [x] Protect with `ADMIN_API_KEY` or a dedicated metrics key.
+  - [x] Document required auth for `/metrics`.
 
 ## API/UX Improvements
-- [x] Align `/api/markets` behavior with documented filters.
-  - [x] Implement `source` and `status` filters or remove them from schema/docs.
-- [x] Add cursor-based pagination for `/api/markets` and `/api/search`.
-  - [x] Define cursor format and add tests for pagination consistency.
-- [x] Add sorting options (volume, closeAt, createdAt).
-  - [x] Document new sort parameters and defaults.
-- [x] Add facets/metadata endpoints.
-  - [x] `/api/tags` and `/api/categories` for exploration.
-  - [x] `/api/search/suggest` for typeahead.
+- [x] Clarify search sorting semantics in docs.
+  - [x] State whether `sort` is a global sort or a re-rank within relevance results.
+  - [x] If re-rank only, document paging limitations or enforce them in code.
 
-## Reliability and Observability
-- [x] Add structured logging with levels (honor `LOG_LEVEL`).
-  - [x] Include source, duration, and error details for sync runs.
-- [x] Add metrics for sync success/failure and external API error rate.
-  - [x] Expose a `/metrics` endpoint or integrate a metrics library.
-- [x] Add circuit breaker or retry stratification for external APIs.
-  - [x] Categorize errors (timeout vs. 4xx vs. 5xx) and handle accordingly.
+## Reliability and Data Robustness
+- [x] Harden `/api/tags` against NULL `tags`.
+  - [x] Use `COALESCE(tags, '[]'::jsonb)` in the SQL.
+  - [x] Add a test to confirm no error when tags are null.
 
-## Code Quality and Tests
-- [x] Fix async normalization in `scripts/test-ingestion.ts`.
-  - [x] Await normalizer functions or use `Promise.all`.
-- [x] Deduplicate `buildEmbeddingText` implementation.
-  - [x] Keep one canonical helper and reuse it.
-- [x] Add unit tests for normalization and content hashing.
-  - [x] Validate parsing edge cases (missing prices, bad JSON, etc.).
-- [x] Add tests for sync diff logic (new, price update, content change).
-
-## Documentation and Roadmap
-- [x] Update README and docs to reflect full sync behavior.
-  - [x] Clarify whether full sync includes closed/settled.
-- [x] Add an "Operations" section describing:
-  - [x] Rate limits and cost controls.
-  - [x] Admin auth setup.
-  - [x] Sync monitoring and alerting.
+## Performance and Abuse Protection
+- [x] Limit rate-limiter memory growth.
+  - [x] Hash or truncate `Authorization` header values used in rate keys.
+  - [x] Prefer API key or IP-based keys when available.

@@ -67,12 +67,13 @@ Edit `.env`:
 DATABASE_URL=postgres://user:pass@localhost:5432/markets
 QDRANT_URL=http://localhost:6333
 OPENAI_API_KEY=sk-your-key-here  # Required!
-ADMIN_API_KEY=your-admin-key     # Required for /api/admin/*
+ADMIN_API_KEY=your-admin-key     # Required for /api/admin/* and /metrics
 CORS_ORIGINS=*                   # Comma-separated list of allowed origins
 SEARCH_RATE_LIMIT_MAX=60         # Requests per window for /api/search
 SEARCH_RATE_LIMIT_WINDOW_SECONDS=60
 QUERY_EMBEDDING_CACHE_MAX_ENTRIES=1000
 QUERY_EMBEDDING_CACHE_TTL_SECONDS=300
+SEARCH_SORT_WINDOW=500           # Candidate window for sorted search paging
 PORT=3000
 ```
 
@@ -249,6 +250,7 @@ curl "http://localhost:3000/api/search?q=cryptocurrency"
 ```
 
 `nextCursor` is a base64-encoded offset. Pass it back as `cursor` to fetch the next page.
+For `sort!=relevance`, paging is limited to the top `SEARCH_SORT_WINDOW` semantic matches.
 
 **Response:**
 
@@ -362,6 +364,7 @@ Response:
 GET /metrics
 ```
 
+Requires `ADMIN_API_KEY` via `x-admin-key` or `Authorization: Bearer`.
 Returns counters for sync runs, external API errors, and embedding cache stats.
 
 **Parameters:**
@@ -576,6 +579,7 @@ Qdrant dashboard: http://localhost:6333/dashboard
 - **Rate limiting:** `/api/search` is limited by `SEARCH_RATE_LIMIT_MAX` and `SEARCH_RATE_LIMIT_WINDOW_SECONDS`.
 - **Admin auth:** set `ADMIN_API_KEY` and send `x-admin-key` or `Authorization: Bearer` for `/api/admin/*`.
 - **Monitoring:** use `/metrics` and `/api/admin/sync/status` to track sync health.
+- **Metrics auth:** use `ADMIN_API_KEY` for `/metrics`.
 
 ## Tech Stack
 

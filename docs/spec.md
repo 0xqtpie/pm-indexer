@@ -432,6 +432,8 @@ Semantic search across all markets.
 - `status`: Filter by `open` | `closed` | `settled`
 - `minVolume`: Minimum volume in USD
 
+Note: `sort!=relevance` pages are limited to the top `SEARCH_SORT_WINDOW` semantic matches.
+
 **Response:**
 
 ```json
@@ -475,6 +477,7 @@ Facet endpoints for tags and categories.
 ### `GET /metrics`
 
 Returns sync and external API error counters.
+Requires `ADMIN_API_KEY` via `x-admin-key` or `Authorization: Bearer`.
 
 ### `POST /api/admin/sync`
 
@@ -537,6 +540,7 @@ SEARCH_RATE_LIMIT_MAX=60
 SEARCH_RATE_LIMIT_WINDOW_SECONDS=60
 QUERY_EMBEDDING_CACHE_MAX_ENTRIES=1000
 QUERY_EMBEDDING_CACHE_TTL_SECONDS=300
+SEARCH_SORT_WINDOW=500
 
 # Sync settings
 SYNC_INTERVAL_MINUTES=10

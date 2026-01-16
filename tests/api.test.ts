@@ -1,5 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import app from "../src/api/routes.ts";
+import { db, markets } from "../src/db/index.ts";
+import { eq } from "drizzle-orm";
 
 describe("API Routes", () => {
   test("GET /health returns 200", async () => {
@@ -32,5 +34,32 @@ describe("API Routes", () => {
     expect(json.markets).toBeDefined();
     expect(json.meta).toBeDefined();
     expect(json.meta.limit).toBe(5);
+  });
+
+  test("GET /api/tags handles null tags", async () => {
+    const id = crypto.randomUUID();
+    await db.insert(markets).values({
+      id,
+      sourceId: `test-tags-${id}`,
+      source: "polymarket",
+      title: "Tags null market",
+      description: "test",
+      yesPrice: 0.5,
+      noPrice: 0.5,
+      volume: 0,
+      volume24h: 0,
+      status: "open",
+      createdAt: new Date(),
+      url: "https://example.com",
+      lastSyncedAt: new Date(),
+      tags: null as unknown as string[],
+    });
+
+    try {
+      const res = await app.request("/api/tags");
+      expect(res.status).toBe(200);
+    } finally {
+      await db.delete(markets).where(eq(markets.id, id));
+    }
   });
 });

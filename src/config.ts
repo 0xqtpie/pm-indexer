@@ -30,6 +30,7 @@ const envSchema = z.object({
   SEARCH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   QUERY_EMBEDDING_CACHE_MAX_ENTRIES: z.coerce.number().int().nonnegative().default(1000),
   QUERY_EMBEDDING_CACHE_TTL_SECONDS: z.coerce.number().int().nonnegative().default(300),
+  SEARCH_SORT_WINDOW: z.coerce.number().int().positive().default(500),
 
   // Server
   PORT: z.coerce.number().int().positive().default(3000),

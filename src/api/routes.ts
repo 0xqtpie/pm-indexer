@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { db, markets } from "../db/index.ts";
 import { and, asc, desc, eq, ilike, sql } from "drizzle-orm";
 import { generateQueryEmbedding } from "../services/embedding/openai.ts";
@@ -11,6 +12,7 @@ import { createRateLimiter } from "./rate-limit.ts";
 import { decodeCursor, encodeCursor } from "./pagination.ts";
 import { logger } from "../logger.ts";
 import { getMetrics } from "../metrics.ts";
+import { getSortedPage } from "../services/search/sorted-page.ts";
 import {
   triggerIncrementalSync,
   triggerFullSync,
@@ -40,17 +42,24 @@ app.use(
   })
 );
 
+function getBearerToken(c: Context): string {
+  const authHeader = c.req.header("authorization") ?? "";
+  return authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : "";
+}
+
+function resolveToken(c: Context, headerName: string): string {
+  const headerToken = c.req.header(headerName) ?? "";
+  return headerToken || getBearerToken(c);
+}
+
 const requireAdminKey = async (c: Context, next: Next) => {
   if (!config.ADMIN_API_KEY) {
     return c.json({ error: "Admin API key not configured" }, 503);
   }
 
-  const authHeader = c.req.header("authorization") ?? "";
-  const bearerToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : "";
-  const headerToken = c.req.header("x-admin-key") ?? "";
-  const token = bearerToken || headerToken;
+  const token = resolveToken(c, "x-admin-key");
 
   if (!token || token !== config.ADMIN_API_KEY) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -58,6 +67,7 @@ const requireAdminKey = async (c: Context, next: Next) => {
 
   await next();
 };
+
 
 const searchRateLimiter = createRateLimiter({
   max: config.SEARCH_RATE_LIMIT_MAX,
@@ -72,7 +82,8 @@ function getRateLimitKey(c: Context): string {
 
   const authHeader = c.req.header("authorization");
   if (authHeader) {
-    return `auth:${authHeader}`;
+    const hash = createHash("sha256").update(authHeader).digest("hex").slice(0, 16);
+    return `auth:${hash}`;
   }
 
   const forwardedFor = c.req.header("x-forwarded-for");
@@ -90,7 +101,7 @@ app.get("/health", (c) => {
 });
 
 // Metrics endpoint
-app.get("/metrics", (c) => {
+app.get("/metrics", requireAdminKey, (c) => {
   return c.json(getMetrics());
 });
 
@@ -160,35 +171,46 @@ app.get("/api/search", async (c) => {
       return c.json({ error: "Failed to generate embedding" }, 502);
     }
 
-    // Search in Qdrant
-    let results = await search(
-      queryEmbedding,
-      { source, status, minVolume },
-      limit,
-      offset
-    );
+    const sortWindow = Math.max(config.SEARCH_SORT_WINDOW, limit);
 
-    if (sort !== "relevance") {
-      const direction = order === "asc" ? 1 : -1;
-      results = results.sort((a, b) => {
-        if (sort === "volume") {
-          return (a.volume - b.volume) * direction;
-        }
-        if (sort === "closeAt") {
-          const aValue = a.closeAt ?? "";
-          const bValue = b.closeAt ?? "";
-          if (aValue === bValue) return 0;
-          return aValue < bValue ? -1 * direction : 1 * direction;
-        }
-        return 0;
+    if (sort !== "relevance" && offset >= sortWindow) {
+      const tookMs = Date.now() - startTime;
+      return c.json({
+        query: trimmedQuery,
+        results: [],
+        meta: {
+          took_ms: tookMs,
+          total: 0,
+          nextCursor: null,
+        },
       });
     }
+
+    // Search in Qdrant
+    const searchLimit = sort === "relevance" ? limit : sortWindow;
+    const searchOffset = sort === "relevance" ? offset : 0;
+
+    const results = await search(
+      queryEmbedding,
+      { source, status, minVolume },
+      searchLimit,
+      searchOffset
+    );
+
+    const pageInfo =
+      sort === "relevance"
+        ? { page: results, nextOffset: offset + results.length, hasMore: results.length === limit }
+        : getSortedPage(results, sort, order, limit, offset, sortWindow);
+
+    const nextCursor = pageInfo.hasMore
+      ? encodeCursor({ offset: pageInfo.nextOffset })
+      : null;
 
     const tookMs = Date.now() - startTime;
 
     return c.json({
       query: trimmedQuery,
-      results: results.map((r) => ({
+      results: pageInfo.page.map((r) => ({
         id: r.id,
         source: r.source,
         sourceId: r.sourceId,
@@ -207,11 +229,8 @@ app.get("/api/search", async (c) => {
       })),
       meta: {
         took_ms: tookMs,
-        total: results.length,
-        nextCursor:
-          results.length === limit
-            ? encodeCursor({ offset: offset + results.length })
-            : null,
+        total: pageInfo.page.length,
+        nextCursor,
       },
     });
   } catch (error) {
@@ -408,7 +427,7 @@ app.get("/api/tags", async (c) => {
     const rows = (await db.execute(
       sql`
         SELECT tag, COUNT(*)::int AS count
-        FROM ${markets}, jsonb_array_elements_text(${markets.tags}) AS tag
+        FROM ${markets}, jsonb_array_elements_text(COALESCE(${markets.tags}, '[]'::jsonb)) AS tag
         GROUP BY tag
         ORDER BY count DESC
         LIMIT ${limit}

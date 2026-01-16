@@ -269,8 +269,8 @@ const facetQuerySchema = z.object({
 // List markets endpoint
 app.get("/api/markets", async (c) => {
   try {
-    const query = c.req.query();
-    const parsed = listQuerySchema.safeParse(query);
+    const queryParams = c.req.query();
+    const parsed = listQuerySchema.safeParse(queryParams);
 
     if (!parsed.success) {
       return c.json(
@@ -309,7 +309,7 @@ app.get("/api/markets", async (c) => {
 
     const orderBy = order === "asc" ? asc(orderColumn) : desc(orderColumn);
 
-    const query = db
+    const dbQuery = db
       .select()
       .from(markets)
       .where(conditions.length ? and(...conditions) : undefined)
@@ -317,7 +317,7 @@ app.get("/api/markets", async (c) => {
       .limit(limit)
       .offset(resolvedOffset);
 
-    const result = await query;
+    const result = await dbQuery;
 
     return c.json({
       markets: result,

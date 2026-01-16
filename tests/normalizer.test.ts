@@ -9,6 +9,14 @@ import {
 function buildPolymarketMarket(
   overrides: Partial<PolymarketMarket> = {}
 ): PolymarketMarket {
+  const hasOutcomePrices = Object.prototype.hasOwnProperty.call(
+    overrides,
+    "outcomePrices"
+  );
+  const outcomePrices = hasOutcomePrices
+    ? overrides.outcomePrices
+    : ["0.6", "0.4"];
+
   return {
     id: overrides.id ?? "market-1",
     question: overrides.question ?? "Will it rain?",
@@ -16,7 +24,7 @@ function buildPolymarketMarket(
     slug: overrides.slug ?? "will-it-rain",
     conditionId: overrides.conditionId ?? "condition-1",
     outcomes: overrides.outcomes ?? ["Yes", "No"],
-    outcomePrices: overrides.outcomePrices ?? ["0.6", "0.4"],
+    outcomePrices: outcomePrices as string[],
     volume: overrides.volume ?? "1000",
     volume24hr: overrides.volume24hr ?? "100",
     liquidity: overrides.liquidity ?? "500",

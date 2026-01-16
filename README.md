@@ -67,6 +67,12 @@ Edit `.env`:
 DATABASE_URL=postgres://user:pass@localhost:5432/markets
 QDRANT_URL=http://localhost:6333
 OPENAI_API_KEY=sk-your-key-here  # Required!
+ADMIN_API_KEY=your-admin-key     # Required for /api/admin/*
+CORS_ORIGINS=*                   # Comma-separated list of allowed origins
+SEARCH_RATE_LIMIT_MAX=60         # Requests per window for /api/search
+SEARCH_RATE_LIMIT_WINDOW_SECONDS=60
+QUERY_EMBEDDING_CACHE_MAX_ENTRIES=1000
+QUERY_EMBEDDING_CACHE_TTL_SECONDS=300
 PORT=3000
 ```
 
@@ -153,7 +159,7 @@ The indexer includes an intelligent sync system that minimizes API calls and emb
 
 - **Frequency:** Daily at 3 AM (configurable via `FULL_SYNC_HOUR`)
 - **Behavior:**
-  - Fetches all markets including closed/settled
+  - Fetches open, closed, and settled markets
   - Updates market status (open → closed → settled)
   - Same intelligent embedding logic as incremental
 
@@ -176,15 +182,20 @@ ENABLE_AUTO_SYNC=true       # Enable background scheduler
 
 ### Manual Triggers
 
+Admin endpoints require `ADMIN_API_KEY` via `x-admin-key` or `Authorization: Bearer`.
+
 ```bash
 # Incremental sync
-curl -X POST http://localhost:3000/api/admin/sync
+curl -X POST http://localhost:3000/api/admin/sync \
+  -H "x-admin-key: your-admin-key"
 
 # Full sync
-curl -X POST http://localhost:3000/api/admin/sync/full
+curl -X POST http://localhost:3000/api/admin/sync/full \
+  -H "x-admin-key: your-admin-key"
 
 # Check status
-curl http://localhost:3000/api/admin/sync/status
+curl http://localhost:3000/api/admin/sync/status \
+  -H "x-admin-key: your-admin-key"
 ```
 
 ## API Reference
@@ -217,6 +228,9 @@ GET /api/search?q=<query>&limit=<n>&source=<source>&status=<status>&minVolume=<v
 |-----------|------|----------|---------|-------------|
 | `q` | string | Yes | - | Search query (natural language) |
 | `limit` | number | No | 20 | Max results (1-100) |
+| `cursor` | string | No | - | Pagination cursor from `meta.nextCursor` |
+| `sort` | string | No | `relevance` | `relevance`, `volume`, or `closeAt` |
+| `order` | string | No | `desc` | `asc` or `desc` |
 | `source` | string | No | - | Filter: `polymarket` or `kalshi` |
 | `status` | string | No | - | Filter: `open`, `closed`, or `settled` |
 | `minVolume` | number | No | - | Minimum volume in USD |
@@ -233,6 +247,8 @@ curl "http://localhost:3000/api/search?q=election&source=polymarket&status=open&
 # Semantic search (finds bitcoin markets even without exact match)
 curl "http://localhost:3000/api/search?q=cryptocurrency"
 ```
+
+`nextCursor` is a base64-encoded offset. Pass it back as `cursor` to fetch the next page.
 
 **Response:**
 
@@ -258,8 +274,26 @@ curl "http://localhost:3000/api/search?q=cryptocurrency"
   ],
   "meta": {
     "took_ms": 45,
-    "total": 20
+    "total": 20,
+    "nextCursor": "eyJvZmZzZXQiOjIwfQ=="
   }
+}
+```
+
+### Search Suggestions
+
+Typeahead suggestions from market titles.
+
+```bash
+GET /api/search/suggest?q=<query>&limit=<n>
+```
+
+Response:
+```json
+{
+  "query": "bit",
+  "suggestions": ["Will Bitcoin reach $100k?", "..."],
+  "meta": { "count": 10 }
 }
 ```
 
@@ -307,12 +341,38 @@ curl "http://localhost:3000/api/markets/123e4567-e89b-12d3-a456-426614174000"
 GET /api/markets?limit=<n>&offset=<n>&source=<source>&status=<status>
 ```
 
+### Tags and Categories
+
+```bash
+GET /api/tags?limit=<n>
+GET /api/categories?limit=<n>
+```
+
+Response:
+```json
+{
+  "tags": [{ "tag": "politics", "count": 123 }],
+  "meta": { "count": 1 }
+}
+```
+
+### Metrics
+
+```bash
+GET /metrics
+```
+
+Returns counters for sync runs, external API errors, and embedding cache stats.
+
 **Parameters:**
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `limit` | number | No | 20 | Max results (1-100) |
-| `offset` | number | No | 0 | Pagination offset |
+| `offset` | number | No | 0 | Pagination offset (legacy) |
+| `cursor` | string | No | - | Pagination cursor from `meta.nextCursor` |
+| `sort` | string | No | `createdAt` | `createdAt`, `closeAt`, `volume`, `volume24h` |
+| `order` | string | No | `desc` | `asc` or `desc` |
 | `source` | string | No | - | Filter by source |
 | `status` | string | No | - | Filter by status |
 
@@ -321,6 +381,8 @@ GET /api/markets?limit=<n>&offset=<n>&source=<source>&status=<status>
 ```bash
 curl "http://localhost:3000/api/markets?limit=10&offset=0"
 ```
+
+Use `meta.nextCursor` as `cursor` for the next page.
 
 ### Sync Status
 
@@ -508,6 +570,12 @@ curl http://localhost:6333/collections/markets | jq '.result.points_count'
 ```
 
 Qdrant dashboard: http://localhost:6333/dashboard
+
+## Operations
+
+- **Rate limiting:** `/api/search` is limited by `SEARCH_RATE_LIMIT_MAX` and `SEARCH_RATE_LIMIT_WINDOW_SECONDS`.
+- **Admin auth:** set `ADMIN_API_KEY` and send `x-admin-key` or `Authorization: Bearer` for `/api/admin/*`.
+- **Monitoring:** use `/metrics` and `/api/admin/sync/status` to track sync health.
 
 ## Tech Stack
 

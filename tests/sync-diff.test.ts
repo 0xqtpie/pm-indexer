@@ -116,6 +116,49 @@ describe("categorizeMarkets", () => {
     expect(statuses).toContain("settled");
   });
 
+  test("marks new markets for insert and embedding", () => {
+    const existingBySourceId = new Map<string, Market>();
+    const normalizedMarkets = [
+      buildNormalizedMarket({ id: "new-id", sourceId: "new-source" }),
+    ];
+
+    const result = categorizeMarkets(normalizedMarkets, existingBySourceId);
+
+    expect(result.newMarkets).toBe(1);
+    expect(result.marketsToInsert).toHaveLength(1);
+    expect(result.marketsNeedingEmbeddings).toHaveLength(1);
+    expect(result.updatedPrices).toBe(0);
+  });
+
+  test("captures price updates without content change", () => {
+    const existingBySourceId = new Map<string, Market>([
+      [
+        "market-1",
+        buildExistingMarket({
+          id: "existing-id",
+          sourceId: "market-1",
+          contentHash: "hash",
+        }),
+      ],
+    ]);
+
+    const normalizedMarkets = [
+      buildNormalizedMarket({
+        id: "incoming-id",
+        sourceId: "market-1",
+        contentHash: "hash",
+        yesPrice: 0.8,
+      }),
+    ];
+
+    const result = categorizeMarkets(normalizedMarkets, existingBySourceId);
+
+    expect(result.updatedPrices).toBe(1);
+    expect(result.contentChanged).toBe(0);
+    expect(result.marketsNeedingEmbeddings).toHaveLength(0);
+    expect(result.marketsToUpdatePrices[0]?.yesPrice).toBeCloseTo(0.8);
+  });
+
   test("marks content changes for re-embedding", () => {
     const existingBySourceId = new Map<string, Market>([
       [

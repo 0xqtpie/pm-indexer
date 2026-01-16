@@ -27,49 +27,49 @@
   - [x] Return clear error responses when limits are exceeded.
 
 ## Performance Optimizations
-- [ ] Replace per-row price updates with batch SQL update.
-  - [ ] Implement `UPDATE ... FROM (VALUES ...)` for price/status changes.
-  - [ ] Measure and compare sync duration before/after.
-- [ ] Add query embedding cache.
-  - [ ] Add LRU/TTL cache for query embeddings to avoid repeat OpenAI calls.
-  - [ ] Add cache metrics (hits/misses).
-- [ ] Reduce DB diff read size in sync.
-  - [ ] Select only required columns (id, sourceId, contentHash, status, prices).
-- [ ] Add guardrails for empty embeddings and short queries.
-  - [ ] Short-circuit and return a clear error or fallback results.
+- [x] Replace per-row price updates with batch SQL update.
+  - [x] Implement `UPDATE ... FROM (VALUES ...)` for price/status changes.
+  - [x] Measure and compare sync duration before/after.
+- [x] Add query embedding cache.
+  - [x] Add LRU/TTL cache for query embeddings to avoid repeat OpenAI calls.
+  - [x] Add cache metrics (hits/misses).
+- [x] Reduce DB diff read size in sync.
+  - [x] Select only required columns (id, sourceId, contentHash, status, prices).
+- [x] Add guardrails for empty embeddings and short queries.
+  - [x] Short-circuit and return a clear error or fallback results.
 
 ## API/UX Improvements
-- [ ] Align `/api/markets` behavior with documented filters.
-  - [ ] Implement `source` and `status` filters or remove them from schema/docs.
-- [ ] Add cursor-based pagination for `/api/markets` and `/api/search`.
-  - [ ] Define cursor format and add tests for pagination consistency.
-- [ ] Add sorting options (volume, closeAt, createdAt).
-  - [ ] Document new sort parameters and defaults.
-- [ ] Add facets/metadata endpoints.
-  - [ ] `/api/tags` and `/api/categories` for exploration.
-  - [ ] `/api/search/suggest` for typeahead.
+- [x] Align `/api/markets` behavior with documented filters.
+  - [x] Implement `source` and `status` filters or remove them from schema/docs.
+- [x] Add cursor-based pagination for `/api/markets` and `/api/search`.
+  - [x] Define cursor format and add tests for pagination consistency.
+- [x] Add sorting options (volume, closeAt, createdAt).
+  - [x] Document new sort parameters and defaults.
+- [x] Add facets/metadata endpoints.
+  - [x] `/api/tags` and `/api/categories` for exploration.
+  - [x] `/api/search/suggest` for typeahead.
 
 ## Reliability and Observability
-- [ ] Add structured logging with levels (honor `LOG_LEVEL`).
-  - [ ] Include source, duration, and error details for sync runs.
-- [ ] Add metrics for sync success/failure and external API error rate.
-  - [ ] Expose a `/metrics` endpoint or integrate a metrics library.
-- [ ] Add circuit breaker or retry stratification for external APIs.
-  - [ ] Categorize errors (timeout vs. 4xx vs. 5xx) and handle accordingly.
+- [x] Add structured logging with levels (honor `LOG_LEVEL`).
+  - [x] Include source, duration, and error details for sync runs.
+- [x] Add metrics for sync success/failure and external API error rate.
+  - [x] Expose a `/metrics` endpoint or integrate a metrics library.
+- [x] Add circuit breaker or retry stratification for external APIs.
+  - [x] Categorize errors (timeout vs. 4xx vs. 5xx) and handle accordingly.
 
 ## Code Quality and Tests
-- [ ] Fix async normalization in `scripts/test-ingestion.ts`.
-  - [ ] Await normalizer functions or use `Promise.all`.
-- [ ] Deduplicate `buildEmbeddingText` implementation.
-  - [ ] Keep one canonical helper and reuse it.
-- [ ] Add unit tests for normalization and content hashing.
-  - [ ] Validate parsing edge cases (missing prices, bad JSON, etc.).
-- [ ] Add tests for sync diff logic (new, price update, content change).
+- [x] Fix async normalization in `scripts/test-ingestion.ts`.
+  - [x] Await normalizer functions or use `Promise.all`.
+- [x] Deduplicate `buildEmbeddingText` implementation.
+  - [x] Keep one canonical helper and reuse it.
+- [x] Add unit tests for normalization and content hashing.
+  - [x] Validate parsing edge cases (missing prices, bad JSON, etc.).
+- [x] Add tests for sync diff logic (new, price update, content change).
 
 ## Documentation and Roadmap
-- [ ] Update README and docs to reflect full sync behavior.
-  - [ ] Clarify whether full sync includes closed/settled.
-- [ ] Add an "Operations" section describing:
-  - [ ] Rate limits and cost controls.
-  - [ ] Admin auth setup.
-  - [ ] Sync monitoring and alerting.
+- [x] Update README and docs to reflect full sync behavior.
+  - [x] Clarify whether full sync includes closed/settled.
+- [x] Add an "Operations" section describing:
+  - [x] Rate limits and cost controls.
+  - [x] Admin auth setup.
+  - [x] Sync monitoring and alerting.

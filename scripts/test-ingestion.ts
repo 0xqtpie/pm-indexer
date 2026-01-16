@@ -26,8 +26,12 @@ async function main() {
 
   // Normalize
   console.log("\n🔄 Normalizing markets...");
-  const polymarketNormalized = polymarketRaw.map(normalizePolymarketMarket);
-  const kalshiNormalized = kalshiRaw.map(normalizeKalshiMarket);
+  const polymarketNormalized = await Promise.all(
+    polymarketRaw.map(normalizePolymarketMarket)
+  );
+  const kalshiNormalized = await Promise.all(
+    kalshiRaw.map(normalizeKalshiMarket)
+  );
 
   const totalNormalized =
     polymarketNormalized.length + kalshiNormalized.length;

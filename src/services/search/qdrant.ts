@@ -2,6 +2,7 @@ import { QdrantClient } from "@qdrant/js-client-rest";
 import { config } from "../../config.ts";
 import type { NormalizedMarket } from "../../types/market.ts";
 import { EMBEDDING_DIMENSIONS } from "../embedding/openai.ts";
+import { logger } from "../../logger.ts";
 
 const COLLECTION_NAME = "markets";
 
@@ -22,7 +23,7 @@ export async function ensureCollection(): Promise<void> {
         distance: "Cosine",
       },
     });
-    console.log(`Created collection: ${COLLECTION_NAME}`);
+    logger.info("Created collection", { collection: COLLECTION_NAME });
   }
 }
 
@@ -108,6 +109,7 @@ export interface SearchResult {
   yesPrice: number;
   noPrice: number;
   volume: number;
+  closeAt: string | null;
   url: string;
   tags: string[];
   category: string | null;
@@ -116,7 +118,8 @@ export interface SearchResult {
 export async function search(
   queryEmbedding: number[],
   filters: SearchFilters = {},
-  limit: number = 20
+  limit: number = 20,
+  offset: number = 0
 ): Promise<SearchResult[]> {
   const must: Array<Record<string, unknown>> = [];
 
@@ -135,6 +138,7 @@ export async function search(
   const results = await qdrant.search(COLLECTION_NAME, {
     vector: queryEmbedding,
     limit,
+    offset,
     filter: must.length > 0 ? { must } : undefined,
     with_payload: true,
   });
@@ -151,6 +155,7 @@ export async function search(
     yesPrice: r.payload?.yesPrice as number,
     noPrice: r.payload?.noPrice as number,
     volume: r.payload?.volume as number,
+    closeAt: (r.payload?.closeAt as string) ?? null,
     url: r.payload?.url as string,
     tags: (r.payload?.tags as string[]) ?? [],
     category: (r.payload?.category as string) ?? null,

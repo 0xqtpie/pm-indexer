@@ -10,6 +10,8 @@ export interface MarketPriceUpdate {
   status: Market["status"];
 }
 
+export type ExistingMarket = Pick<Market, "id" | "sourceId" | "contentHash">;
+
 export interface CategorizedMarkets {
   marketsToInsert: NormalizedMarket[];
   marketsToUpdatePrices: MarketPriceUpdate[];
@@ -21,7 +23,7 @@ export interface CategorizedMarkets {
 
 export function categorizeMarkets(
   normalizedMarkets: NormalizedMarket[],
-  existingBySourceId: Map<string, Market>
+  existingBySourceId: Map<string, ExistingMarket>
 ): CategorizedMarkets {
   const marketsToInsert: NormalizedMarket[] = [];
   const marketsToUpdatePrices: MarketPriceUpdate[] = [];

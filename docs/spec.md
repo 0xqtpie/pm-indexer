@@ -226,13 +226,7 @@ Concatenate into a single string for embedding:
 
 ```typescript
 function buildEmbeddingText(market: NormalizedMarket): string {
-  const parts = [
-    market.title,
-    market.description,
-    market.rules,
-    market.tags.join(", "),
-    market.category,
-  ].filter(Boolean);
+  const parts = [market.title, market.description, market.rules].filter(Boolean);
 
   return parts.join("\n\n");
 }
@@ -431,6 +425,9 @@ Semantic search across all markets.
 
 - `q` (required): Search query string
 - `limit`: Number of results (default: 20, max: 100)
+- `cursor`: Pagination cursor from `meta.nextCursor`
+- `sort`: `relevance` | `volume` | `closeAt`
+- `order`: `asc` | `desc`
 - `source`: Filter by `polymarket` | `kalshi`
 - `status`: Filter by `open` | `closed` | `settled`
 - `minVolume`: Minimum volume in USD
@@ -453,7 +450,8 @@ Semantic search across all markets.
   ],
   "meta": {
     "took_ms": 45,
-    "total": 15
+    "total": 15,
+    "nextCursor": "eyJvZmZzZXQiOjIwfQ=="
   }
 }
 ```
@@ -465,6 +463,18 @@ Get full market details.
 ### `GET /api/markets`
 
 List markets with filters (traditional filtering, not semantic).
+
+### `GET /api/search/suggest`
+
+Typeahead suggestions from market titles.
+
+### `GET /api/tags` / `GET /api/categories`
+
+Facet endpoints for tags and categories.
+
+### `GET /metrics`
+
+Returns sync and external API error counters.
 
 ### `POST /api/admin/sync`
 
@@ -521,6 +531,12 @@ volumes:
 DATABASE_URL=postgres://user:pass@localhost:5432/markets
 QDRANT_URL=http://localhost:6333
 OPENAI_API_KEY=sk-...
+ADMIN_API_KEY=your-admin-key
+CORS_ORIGINS=*
+SEARCH_RATE_LIMIT_MAX=60
+SEARCH_RATE_LIMIT_WINDOW_SECONDS=60
+QUERY_EMBEDDING_CACHE_MAX_ENTRIES=1000
+QUERY_EMBEDDING_CACHE_TTL_SECONDS=300
 
 # Sync settings
 SYNC_INTERVAL_MINUTES=10

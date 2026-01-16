@@ -3,6 +3,7 @@ import type {
   KalshiMarket,
   KalshiEventsResponse,
 } from "../../types/kalshi.ts";
+import { recordExternalApiFailure } from "./errors.ts";
 
 const BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
 const PAGE_SIZE = 100;
@@ -49,16 +50,24 @@ async function fetchKalshiMarketsByStatus(
       searchParams.cursor = cursor;
     }
 
-    const response = await ky
-      .get(`${BASE_URL}/events`, {
-        searchParams,
-        timeout: 30000,
-        retry: {
-          limit: 3,
-          delay: (attemptCount) => Math.min(1000 * 2 ** attemptCount, 10000),
-        },
-      })
-      .json<KalshiEventsResponse>();
+    let response: KalshiEventsResponse;
+    try {
+      response = await ky
+        .get(`${BASE_URL}/events`, {
+          searchParams,
+          timeout: 30000,
+          retry: {
+            limit: 3,
+            methods: ["get"],
+            statusCodes: [408, 429, 500, 502, 503, 504],
+            delay: (attemptCount) => Math.min(1000 * 2 ** attemptCount, 10000),
+          },
+        })
+        .json<KalshiEventsResponse>();
+    } catch (error) {
+      recordExternalApiFailure("kalshi", error);
+      throw error;
+    }
 
     const events = response.events ?? [];
 
@@ -135,7 +144,8 @@ export async function fetchKalshiMarket(
       .get(`${BASE_URL}/markets/${ticker}`, { timeout: 10000 })
       .json<{ market: KalshiMarket }>();
     return response.market;
-  } catch {
+  } catch (error) {
+    recordExternalApiFailure("kalshi", error);
     return null;
   }
 }

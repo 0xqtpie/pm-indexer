@@ -1,5 +1,6 @@
 import ky from "ky";
 import type { PolymarketMarket, PolymarketEvent } from "../../types/polymarket.ts";
+import { recordExternalApiFailure } from "./errors.ts";
 
 const BASE_URL = "https://gamma-api.polymarket.com";
 const PAGE_SIZE = 100;
@@ -82,16 +83,24 @@ async function fetchPolymarketMarketsByStatus(
       searchParams.archived = true;
     }
 
-    const response = await ky
-      .get(`${BASE_URL}/events`, {
-        searchParams,
-        timeout: 30000,
-        retry: {
-          limit: 3,
-          delay: (attemptCount) => Math.min(1000 * 2 ** attemptCount, 10000),
-        },
-      })
-      .json<PolymarketEvent[]>();
+    let response: PolymarketEvent[];
+    try {
+      response = await ky
+        .get(`${BASE_URL}/events`, {
+          searchParams,
+          timeout: 30000,
+          retry: {
+            limit: 3,
+            methods: ["get"],
+            statusCodes: [408, 429, 500, 502, 503, 504],
+            delay: (attemptCount) => Math.min(1000 * 2 ** attemptCount, 10000),
+          },
+        })
+        .json<PolymarketEvent[]>();
+    } catch (error) {
+      recordExternalApiFailure("polymarket", error);
+      throw error;
+    }
 
     const events = Array.isArray(response) ? response : [];
 
@@ -165,7 +174,8 @@ export async function fetchPolymarketMarket(
     return await ky
       .get(`${BASE_URL}/markets/${id}`, { timeout: 10000 })
       .json<PolymarketMarket>();
-  } catch {
+  } catch (error) {
+    recordExternalApiFailure("polymarket", error);
     return null;
   }
 }

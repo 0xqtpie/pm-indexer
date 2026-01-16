@@ -17,8 +17,11 @@ import {
 } from "../search/qdrant.ts";
 import { config } from "../../config.ts";
 import type { NormalizedMarket, MarketSource } from "../../types/market.ts";
-import type { NewMarket, Market } from "../../db/schema.ts";
+import type { NewMarket } from "../../db/schema.ts";
 import { categorizeMarkets } from "./diff.ts";
+import type { ExistingMarket } from "./diff.ts";
+import { logger } from "../../logger.ts";
+import { recordSyncFailure, recordSyncSuccess } from "../../metrics.ts";
 
 export interface SyncResult {
   source: MarketSource;
@@ -67,7 +70,7 @@ export async function incrementalSync(): Promise<FullSyncResult> {
   const startTime = Date.now();
 
   try {
-    console.log("🔄 Starting incremental sync...");
+    logger.info("Starting incremental sync");
 
     // Ensure Qdrant collection exists
     await ensureCollection();
@@ -87,15 +90,26 @@ export async function incrementalSync(): Promise<FullSyncResult> {
     lastSyncTime = new Date();
     lastSyncResult = result;
 
-    console.log(`✅ Incremental sync complete in ${result.totalDurationMs}ms`);
-    console.log(
-      `   Polymarket: ${polymarketResult.fetched} fetched, ${polymarketResult.newMarkets} new, ${polymarketResult.embeddingsGenerated} embeddings`
-    );
-    console.log(
-      `   Kalshi: ${kalshiResult.fetched} fetched, ${kalshiResult.newMarkets} new, ${kalshiResult.embeddingsGenerated} embeddings`
-    );
+    logger.info("Incremental sync complete", {
+      durationMs: result.totalDurationMs,
+      polymarket: {
+        fetched: polymarketResult.fetched,
+        newMarkets: polymarketResult.newMarkets,
+        embeddingsGenerated: polymarketResult.embeddingsGenerated,
+      },
+      kalshi: {
+        fetched: kalshiResult.fetched,
+        newMarkets: kalshiResult.newMarkets,
+        embeddingsGenerated: kalshiResult.embeddingsGenerated,
+      },
+    });
 
+    recordSyncSuccess("incremental", result.totalDurationMs);
     return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    recordSyncFailure("incremental", message);
+    throw error;
   } finally {
     isSyncing = false;
   }
@@ -113,7 +127,7 @@ export async function fullSync(): Promise<FullSyncResult> {
   const startTime = Date.now();
 
   try {
-    console.log("🔄 Starting FULL sync (open + closed + settled markets)...");
+    logger.info("Starting full sync", { scope: "open, closed, settled" });
 
     // Ensure Qdrant collection exists
     await ensureCollection();
@@ -134,15 +148,24 @@ export async function fullSync(): Promise<FullSyncResult> {
     lastFullSyncTime = new Date();
     lastSyncResult = result;
 
-    console.log(`✅ Full sync complete in ${result.totalDurationMs}ms`);
-    console.log(
-      `   Polymarket: ${polymarketResult.fetched} fetched, ${polymarketResult.newMarkets} new`
-    );
-    console.log(
-      `   Kalshi: ${kalshiResult.fetched} fetched, ${kalshiResult.newMarkets} new`
-    );
+    logger.info("Full sync complete", {
+      durationMs: result.totalDurationMs,
+      polymarket: {
+        fetched: polymarketResult.fetched,
+        newMarkets: polymarketResult.newMarkets,
+      },
+      kalshi: {
+        fetched: kalshiResult.fetched,
+        newMarkets: kalshiResult.newMarkets,
+      },
+    });
 
+    recordSyncSuccess("full", result.totalDurationMs);
     return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    recordSyncFailure("full", message);
+    throw error;
   } finally {
     isSyncing = false;
   }
@@ -165,7 +188,12 @@ async function syncSource(
 
   try {
     // Step 1: Fetch open markets from API (sports excluded based on config)
-    console.log(`📊 Fetching ${source} markets (limit: ${limit}, excludeSports: ${excludeSports})...`);
+    logger.info("Fetching markets", {
+      source,
+      limit,
+      excludeSports,
+      status: fetchStatus,
+    });
 
     let normalizedMarkets: NormalizedMarket[] = [];
 
@@ -191,18 +219,22 @@ async function syncSource(
       );
     }
 
-    console.log(`   Fetched ${fetched} markets from ${source}`);
+    logger.info("Fetched markets", { source, fetched });
 
     // Step 2: Get existing markets from database by sourceId (batched to avoid param limit)
     const sourceIds = normalizedMarkets.map((m) => m.sourceId);
-    const existingBySourceId = new Map<string, Market>();
+    const existingBySourceId = new Map<string, ExistingMarket>();
 
     // Batch queries to avoid MAX_PARAMETERS_EXCEEDED (Postgres limit ~65k)
     const DB_BATCH_SIZE = 5000;
     for (let i = 0; i < sourceIds.length; i += DB_BATCH_SIZE) {
       const batchIds = sourceIds.slice(i, i + DB_BATCH_SIZE);
       const batchResults = await db
-        .select()
+        .select({
+          id: markets.id,
+          sourceId: markets.sourceId,
+          contentHash: markets.contentHash,
+        })
         .from(markets)
         .where(
           and(eq(markets.source, source), inArray(markets.sourceId, batchIds))
@@ -212,7 +244,10 @@ async function syncSource(
       }
     }
 
-    console.log(`   Found ${existingBySourceId.size} existing markets in DB`);
+    logger.info("Loaded existing markets", {
+      source,
+      count: existingBySourceId.size,
+    });
 
     // Step 3: Categorize markets
     const {
@@ -228,21 +263,28 @@ async function syncSource(
     updatedPrices = updatedPricesCount;
     contentChanged = contentChangedCount;
 
-    console.log(
-      `   ${source}: ${marketsToInsert.length} new, ${updatedPrices} price updates, ${contentChanged} content changes`
-    );
+    logger.info("Categorized markets", {
+      source,
+      newMarkets: marketsToInsert.length,
+      priceUpdates: updatedPrices,
+      contentChanged,
+    });
 
     // Step 4: Generate embeddings for new/changed markets
     if (marketsNeedingEmbeddings.length > 0) {
-      console.log(
-        `🧠 Generating embeddings for ${marketsNeedingEmbeddings.length} ${source} markets...`
-      );
+      logger.info("Generating embeddings", {
+        source,
+        count: marketsNeedingEmbeddings.length,
+      });
       const embeddings = await generateMarketEmbeddings(marketsNeedingEmbeddings);
       embeddingsGenerated = embeddings.size;
 
       // Upsert to Qdrant
       await upsertMarkets(marketsNeedingEmbeddings, embeddings);
-      console.log(`   Upserted ${embeddings.size} vectors to Qdrant`);
+      logger.info("Upserted vectors to Qdrant", {
+        source,
+        vectors: embeddings.size,
+      });
     }
 
     // Step 5: Batch insert new markets to Postgres
@@ -281,25 +323,41 @@ async function syncSource(
 
         await db.insert(markets).values(dbRecords);
       }
-      console.log(`   Inserted ${marketsToInsert.length} new markets to Postgres`);
+      logger.info("Inserted new markets", {
+        source,
+        count: marketsToInsert.length,
+      });
     }
 
     // Step 6: Batch update prices for existing markets
     if (marketsToUpdatePrices.length > 0) {
-      // Use raw SQL for efficient batch update
-      for (const update of marketsToUpdatePrices) {
-        await db
-          .update(markets)
-          .set({
-            yesPrice: update.yesPrice,
-            noPrice: update.noPrice,
-            volume: update.volume,
-            volume24h: update.volume24h,
-            status: update.status,
-            lastSyncedAt: new Date(),
-          })
-          .where(eq(markets.id, update.id));
-      }
+      const updateStart = Date.now();
+      const syncedAt = new Date();
+
+      const updates = marketsToUpdatePrices.map(
+        (update) =>
+          sql`(${update.id}, ${update.yesPrice}, ${update.noPrice}, ${update.volume}, ${update.volume24h}, ${update.status}, ${syncedAt})`
+      );
+
+      await db.execute(sql`
+        UPDATE ${markets} AS m
+        SET
+          yes_price = v.yes_price,
+          no_price = v.no_price,
+          volume = v.volume,
+          volume_24h = v.volume_24h,
+          status = v.status::market_status,
+          last_synced_at = v.last_synced_at
+        FROM (VALUES ${sql.join(updates, sql`, `)})
+          AS v(id, yes_price, no_price, volume, volume_24h, status, last_synced_at)
+        WHERE m.id = v.id
+      `);
+
+      logger.info("Batch updated markets", {
+        source,
+        count: marketsToUpdatePrices.length,
+        durationMs: Date.now() - updateStart,
+      });
     }
 
     // Step 7: Refresh payloads for existing markets (price/status changes)
@@ -341,7 +399,7 @@ async function syncSource(
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     errors.push(errMsg);
-    console.error(`❌ Error syncing ${source}:`, errMsg);
+    logger.error("Error syncing source", { source, error: errMsg });
   }
 
   return {

@@ -52,13 +52,7 @@ export interface NormalizedMarket {
 }
 
 export function buildEmbeddingText(market: NormalizedMarket): string {
-  const parts = [
-    market.title,
-    market.description,
-    market.rules,
-    market.tags.join(", "),
-    market.category,
-  ].filter(Boolean);
+  const parts = [market.title, market.description, market.rules].filter(Boolean);
 
   return parts.join("\n\n");
 }

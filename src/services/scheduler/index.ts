@@ -1,5 +1,6 @@
 import { config } from "../../config.ts";
 import { incrementalSync, fullSync, getSyncStatus } from "../sync/index.ts";
+import { logger } from "../../logger.ts";
 
 let incrementalIntervalId: ReturnType<typeof setInterval> | null = null;
 let fullSyncCheckIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -13,28 +14,31 @@ let isRunning = false;
  */
 export function startScheduler(): void {
   if (isRunning) {
-    console.log("⚠️  Scheduler already running");
+    logger.warn("Scheduler already running");
     return;
   }
 
   if (!config.ENABLE_AUTO_SYNC) {
-    console.log("📅 Auto-sync disabled (set ENABLE_AUTO_SYNC=true to enable)");
+    logger.info("Auto-sync disabled", { enableAutoSync: config.ENABLE_AUTO_SYNC });
     return;
   }
 
   isRunning = true;
   const intervalMs = config.SYNC_INTERVAL_MINUTES * 60 * 1000;
 
-  console.log("📅 Starting sync scheduler:");
-  console.log(`   Incremental sync: every ${config.SYNC_INTERVAL_MINUTES} minutes`);
-  console.log(`   Full sync: daily at ${config.FULL_SYNC_HOUR}:00`);
+  logger.info("Starting sync scheduler", {
+    incrementalIntervalMinutes: config.SYNC_INTERVAL_MINUTES,
+    fullSyncHour: config.FULL_SYNC_HOUR,
+  });
 
   // Start incremental sync interval
   incrementalIntervalId = setInterval(async () => {
     try {
       await runIncrementalSync();
     } catch (error) {
-      console.error("❌ Scheduled incremental sync failed:", error);
+      logger.error("Scheduled incremental sync failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }, intervalMs);
 
@@ -49,11 +53,13 @@ export function startScheduler(): void {
       const lastFullSyncDay = lastFullSyncTime?.toDateString();
 
       if (lastFullSyncDay !== today) {
-        console.log("🌅 Time for daily full sync...");
+        logger.info("Time for daily full sync");
         try {
           await runFullSync();
         } catch (error) {
-          console.error("❌ Scheduled full sync failed:", error);
+          logger.error("Scheduled full sync failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
     }
@@ -61,11 +67,13 @@ export function startScheduler(): void {
 
   // Run initial sync after a short delay
   setTimeout(async () => {
-    console.log("🚀 Running initial sync...");
+    logger.info("Running initial sync");
     try {
       await runIncrementalSync();
     } catch (error) {
-      console.error("❌ Initial sync failed:", error);
+      logger.error("Initial sync failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }, 5000);
 }
@@ -85,7 +93,7 @@ export function stopScheduler(): void {
   }
 
   isRunning = false;
-  console.log("📅 Sync scheduler stopped");
+  logger.info("Sync scheduler stopped");
 }
 
 /**
@@ -102,7 +110,7 @@ async function runIncrementalSync(): Promise<void> {
   const { isSyncing } = getSyncStatus();
 
   if (isSyncing) {
-    console.log("⏭️  Skipping incremental sync - sync already in progress");
+    logger.info("Skipping incremental sync - sync already in progress");
     return;
   }
 
@@ -116,7 +124,7 @@ async function runFullSync(): Promise<void> {
   const { isSyncing } = getSyncStatus();
 
   if (isSyncing) {
-    console.log("⏭️  Skipping full sync - sync already in progress");
+    logger.info("Skipping full sync - sync already in progress");
     return;
   }
 

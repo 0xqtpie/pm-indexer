@@ -428,7 +428,7 @@ describe("Semantic Search Integration Tests", () => {
 
   describe("Edge Cases", () => {
     test("handles empty/generic query", async () => {
-      const embedding = await generateEmbedding("a");
+      const embedding = await generateEmbedding("aa");
       const results = await search(embedding, {}, 10);
 
       // Should still return results

@@ -10,7 +10,7 @@
 - [ ] Ensure search payload reflects live prices/status.
   - [x] Update Qdrant payload on every price/status change, even without re-embedding.
   - [x] Add a fast path to refresh payload fields without re-upserting vectors.
-  - [ ] Add a test that verifies price/status updates are visible via `/api/search`.
+  - [x] Add a test that verifies price/status updates are visible via `/api/search`.
 - [ ] Expand content updates beyond title/description/rules.
   - [ ] Update sync to also refresh subtitle, tags, category, closeAt, url, imageUrl.
   - [ ] Keep content hash inputs limited to title + description + rules (no tags/category/subtitle).

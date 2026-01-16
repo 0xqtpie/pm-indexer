@@ -4,7 +4,45 @@ import {
   search,
   getCollectionInfo,
   ensureCollection,
+  updateMarketPayloads,
+  qdrant,
+  COLLECTION_NAME,
 } from "../src/services/search/qdrant.ts";
+import type { NormalizedMarket, MarketSource } from "../src/types/market.ts";
+
+function marketFromPayload(
+  id: string,
+  payload: Record<string, unknown>
+): NormalizedMarket {
+  return {
+    id,
+    sourceId: payload.sourceId as string,
+    source: payload.source as MarketSource,
+    title: payload.title as string,
+    subtitle: (payload.subtitle as string) ?? undefined,
+    description: (payload.description as string) ?? "",
+    rules: undefined,
+    category: (payload.category as string) ?? undefined,
+    tags: (payload.tags as string[]) ?? [],
+    contentHash: "hash",
+    yesPrice: (payload.yesPrice as number) ?? 0.5,
+    noPrice: (payload.noPrice as number) ?? 0.5,
+    lastPrice: undefined,
+    volume: (payload.volume as number) ?? 0,
+    volume24h: (payload.volume24h as number) ?? 0,
+    liquidity: undefined,
+    status: (payload.status as "open" | "closed" | "settled") ?? "open",
+    result: null,
+    createdAt: new Date(),
+    openAt: undefined,
+    closeAt: payload.closeAt ? new Date(payload.closeAt as string) : undefined,
+    expiresAt: undefined,
+    url: (payload.url as string) ?? "",
+    imageUrl: undefined,
+    embeddingModel: undefined,
+    lastSyncedAt: new Date(),
+  };
+}
 
 describe("Semantic Search Integration Tests", () => {
   beforeAll(async () => {
@@ -344,6 +382,46 @@ describe("Semantic Search Integration Tests", () => {
 
       for (const result of results) {
         expect(result.url).toMatch(/^https?:\/\//);
+      }
+    });
+
+    test("payload updates are visible in search results", async () => {
+      const embedding = await generateEmbedding("market");
+      const results = await search(embedding, {}, 5);
+
+      expect(results.length).toBeGreaterThan(0);
+      const target = results[0];
+
+      const retrieved = await qdrant.retrieve(COLLECTION_NAME, {
+        ids: [target.id],
+        with_payload: true,
+        with_vector: false,
+      });
+      const payload = retrieved[0]?.payload as Record<string, unknown> | undefined;
+
+      expect(payload).toBeDefined();
+      if (!payload) return;
+
+      const originalMarket = marketFromPayload(target.id, payload);
+      const updatedMarket: NormalizedMarket = {
+        ...originalMarket,
+        yesPrice: 0.01,
+        noPrice: 0.99,
+        status: "closed",
+      };
+
+      try {
+        await updateMarketPayloads([updatedMarket]);
+
+        const updatedResults = await search(embedding, {}, 5);
+        const updatedTarget = updatedResults.find((r) => r.id === target.id);
+
+        expect(updatedTarget).toBeDefined();
+        expect(updatedTarget?.status).toBe("closed");
+        expect(updatedTarget?.yesPrice).toBeCloseTo(0.01);
+        expect(updatedTarget?.noPrice).toBeCloseTo(0.99);
+      } finally {
+        await updateMarketPayloads([originalMarket]);
       }
     });
   });

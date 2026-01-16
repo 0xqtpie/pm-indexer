@@ -14,6 +14,7 @@ import { ensureCollection, upsertMarkets } from "../search/qdrant.ts";
 import { config } from "../../config.ts";
 import type { NormalizedMarket, MarketSource } from "../../types/market.ts";
 import type { NewMarket, Market } from "../../db/schema.ts";
+import { categorizeMarkets } from "./diff.ts";
 
 export interface SyncResult {
   source: MarketSource;
@@ -210,46 +211,18 @@ async function syncSource(
     console.log(`   Found ${existingBySourceId.size} existing markets in DB`);
 
     // Step 3: Categorize markets
-    const marketsToInsert: NormalizedMarket[] = [];
-    const marketsToUpdatePrices: Array<{
-      id: string;
-      yesPrice: number;
-      noPrice: number;
-      volume: number;
-      volume24h: number;
-      status: string;
-    }> = [];
-    const marketsNeedingEmbeddings: NormalizedMarket[] = [];
+    const {
+      marketsToInsert,
+      marketsToUpdatePrices,
+      marketsNeedingEmbeddings,
+      newMarkets: newMarketsCount,
+      updatedPrices: updatedPricesCount,
+      contentChanged: contentChangedCount,
+    } = categorizeMarkets(normalizedMarkets, existingBySourceId);
 
-    for (const market of normalizedMarkets) {
-      const existing = existingBySourceId.get(market.sourceId);
-
-      if (!existing) {
-        // New market - needs insertion and embedding
-        marketsToInsert.push(market);
-        marketsNeedingEmbeddings.push(market);
-        newMarkets++;
-      } else {
-        // Existing market - update prices
-        marketsToUpdatePrices.push({
-          id: existing.id,
-          yesPrice: market.yesPrice,
-          noPrice: market.noPrice,
-          volume: market.volume,
-          volume24h: market.volume24h,
-          status: market.status,
-        });
-        updatedPrices++;
-
-        // Check if content changed (needs re-embedding)
-        if (existing.contentHash !== market.contentHash) {
-          // Update the market's content and mark for re-embedding
-          market.id = existing.id; // Use existing ID
-          marketsNeedingEmbeddings.push(market);
-          contentChanged++;
-        }
-      }
-    }
+    newMarkets = newMarketsCount;
+    updatedPrices = updatedPricesCount;
+    contentChanged = contentChangedCount;
 
     console.log(
       `   ${source}: ${marketsToInsert.length} new, ${updatedPrices} price updates, ${contentChanged} content changes`
@@ -318,7 +291,7 @@ async function syncSource(
             noPrice: update.noPrice,
             volume: update.volume,
             volume24h: update.volume24h,
-            status: update.status as "open" | "closed" | "settled",
+          status: update.status,
             lastSyncedAt: new Date(),
           })
           .where(eq(markets.id, update.id));

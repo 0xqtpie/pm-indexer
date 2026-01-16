@@ -6,7 +6,7 @@
     - [x] Polymarket: add configurable `closed`/`archived` options or a dedicated full-sync mode.
     - [x] Kalshi: allow fetching closed/settled markets via status filters.
   - [x] Adjust full sync orchestration to request open+closed+settled (or all) based on mode.
-  - [ ] Add tests that verify status transitions (open -> closed -> settled) are ingested.
+  - [x] Add tests that verify status transitions (open -> closed -> settled) are ingested.
 - [ ] Ensure search payload reflects live prices/status.
   - [ ] Update Qdrant payload on every price/status change, even without re-embedding.
   - [ ] Add a fast path to refresh payload fields without re-upserting vectors.

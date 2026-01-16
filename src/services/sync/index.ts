@@ -69,8 +69,8 @@ export async function incrementalSync(): Promise<FullSyncResult> {
 
     // Sync both sources in parallel
     const [polymarketResult, kalshiResult] = await Promise.all([
-      syncSource("polymarket"),
-      syncSource("kalshi"),
+      syncSource("polymarket", "open"),
+      syncSource("kalshi", "open"),
     ]);
 
     const result: FullSyncResult = {
@@ -97,7 +97,7 @@ export async function incrementalSync(): Promise<FullSyncResult> {
 }
 
 /**
- * Perform a full sync - fetches all open markets from both sources.
+ * Perform a full sync - fetches open, closed, and settled markets.
  */
 export async function fullSync(): Promise<FullSyncResult> {
   if (isSyncing) {
@@ -108,15 +108,15 @@ export async function fullSync(): Promise<FullSyncResult> {
   const startTime = Date.now();
 
   try {
-    console.log("🔄 Starting FULL sync (open markets only)...");
+    console.log("🔄 Starting FULL sync (open + closed + settled markets)...");
 
     // Ensure Qdrant collection exists
     await ensureCollection();
 
     // Sync both sources
     const [polymarketResult, kalshiResult] = await Promise.all([
-      syncSource("polymarket"),
-      syncSource("kalshi"),
+      syncSource("polymarket", "all"),
+      syncSource("kalshi", "all"),
     ]);
 
     const result: FullSyncResult = {
@@ -143,7 +143,10 @@ export async function fullSync(): Promise<FullSyncResult> {
   }
 }
 
-async function syncSource(source: MarketSource): Promise<SyncResult> {
+async function syncSource(
+  source: MarketSource,
+  fetchStatus: "open" | "all"
+): Promise<SyncResult> {
   const startTime = Date.now();
   const errors: string[] = [];
   const limit = config.MARKET_FETCH_LIMIT;
@@ -165,6 +168,7 @@ async function syncSource(source: MarketSource): Promise<SyncResult> {
       const rawMarkets = await fetchPolymarketMarkets({
         limit,
         excludeSports,
+        status: fetchStatus,
       });
       fetched = rawMarkets.length;
       normalizedMarkets = await Promise.all(
@@ -174,6 +178,7 @@ async function syncSource(source: MarketSource): Promise<SyncResult> {
       const rawMarkets = await fetchKalshiMarkets({
         limit,
         excludeSports,
+        status: fetchStatus,
       });
       fetched = rawMarkets.length;
       normalizedMarkets = await Promise.all(

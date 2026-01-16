@@ -1,7 +1,7 @@
 # Review To-Do List
 
 ## Data Correctness (Highest Priority)
-- [ ] Fix "full sync" to include closed/settled markets (not open-only).
+- [x] Fix "full sync" to include closed/settled markets (not open-only).
   - [x] Update ingestion fetchers to support status filtering beyond open only.
     - [x] Polymarket: add configurable `closed`/`archived` options or a dedicated full-sync mode.
     - [x] Kalshi: allow fetching closed/settled markets via status filters.

@@ -14,7 +14,7 @@
 - [ ] Expand content updates beyond title/description/rules.
   - [x] Update sync to also refresh subtitle, tags, category, closeAt, url, imageUrl.
   - [x] Keep content hash inputs limited to title + description + rules (no tags/category/subtitle).
-  - [ ] Add tests to ensure content changes trigger re-embedding when intended.
+  - [x] Add tests to ensure content changes trigger re-embedding when intended.
 
 ## Security and Cost Controls
 - [ ] Protect all `/api/admin/*` endpoints.

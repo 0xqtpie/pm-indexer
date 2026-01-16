@@ -115,4 +115,31 @@ describe("categorizeMarkets", () => {
     expect(statuses).toContain("closed");
     expect(statuses).toContain("settled");
   });
+
+  test("marks content changes for re-embedding", () => {
+    const existingBySourceId = new Map<string, Market>([
+      [
+        "market-1",
+        buildExistingMarket({
+          id: "existing-id",
+          sourceId: "market-1",
+          contentHash: "old-hash",
+        }),
+      ],
+    ]);
+
+    const normalizedMarkets = [
+      buildNormalizedMarket({
+        id: "incoming-id",
+        sourceId: "market-1",
+        contentHash: "new-hash",
+      }),
+    ];
+
+    const result = categorizeMarkets(normalizedMarkets, existingBySourceId);
+
+    expect(result.contentChanged).toBe(1);
+    expect(result.marketsNeedingEmbeddings).toHaveLength(1);
+    expect(result.marketsNeedingEmbeddings[0]?.id).toBe("existing-id");
+  });
 });

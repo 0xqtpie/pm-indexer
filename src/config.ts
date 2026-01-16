@@ -25,6 +25,10 @@ const envSchema = z.object({
   CORS_METHODS: z.string().default("GET,POST,OPTIONS"),
   CORS_HEADERS: z.string().default("Content-Type,Authorization,X-Admin-Key,X-API-Key"),
 
+  // Search rate limiting
+  SEARCH_RATE_LIMIT_MAX: z.coerce.number().int().nonnegative().default(60),
+  SEARCH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
   // Server
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

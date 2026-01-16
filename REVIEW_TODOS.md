@@ -23,7 +23,7 @@
 - [x] Restrict CORS to known origins and allowed methods/headers.
   - [x] Make CORS configurable via environment.
 - [ ] Add rate limiting for `/api/search` to control OpenAI costs.
-  - [ ] Add per-IP or per-API-key budgets.
+  - [x] Add per-IP or per-API-key budgets.
   - [ ] Return clear error responses when limits are exceeded.
 
 ## Performance Optimizations

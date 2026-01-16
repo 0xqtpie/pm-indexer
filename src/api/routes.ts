@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { generateEmbedding } from "../services/embedding/openai.ts";
 import { search } from "../services/search/qdrant.ts";
 import { getSyncStatus } from "../services/sync/index.ts";
+import { createRateLimiter } from "./rate-limit.ts";
 import {
   triggerIncrementalSync,
   triggerFullSync,
@@ -55,6 +56,31 @@ const requireAdminKey = async (c: Context, next: Next) => {
   await next();
 };
 
+const searchRateLimiter = createRateLimiter({
+  max: config.SEARCH_RATE_LIMIT_MAX,
+  windowMs: config.SEARCH_RATE_LIMIT_WINDOW_SECONDS * 1000,
+});
+
+function getRateLimitKey(c: Context): string {
+  const apiKey = c.req.header("x-api-key");
+  if (apiKey) {
+    return `key:${apiKey}`;
+  }
+
+  const authHeader = c.req.header("authorization");
+  if (authHeader) {
+    return `auth:${authHeader}`;
+  }
+
+  const forwardedFor = c.req.header("x-forwarded-for");
+  const ip =
+    forwardedFor?.split(",")[0]?.trim() ??
+    c.req.header("x-real-ip") ??
+    c.req.header("cf-connecting-ip") ??
+    "unknown";
+  return `ip:${ip}`;
+}
+
 // Health check
 app.get("/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -85,6 +111,23 @@ app.get("/api/search", async (c) => {
     }
 
     const { q, limit, source, status, minVolume } = parsed.data;
+
+    const rateLimitKey = getRateLimitKey(c);
+    const rateLimitResult = searchRateLimiter(rateLimitKey);
+    if (!rateLimitResult.allowed) {
+      const retryAfterSeconds = Math.max(
+        0,
+        Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000)
+      );
+      c.header("Retry-After", retryAfterSeconds.toString());
+      return c.json(
+        {
+          error: "Rate limit exceeded",
+          retryAfterSeconds,
+        },
+        429
+      );
+    }
 
     // Generate embedding for query
     const queryEmbedding = await generateEmbedding(q);

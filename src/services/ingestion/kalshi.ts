@@ -7,23 +7,40 @@ import type {
 const BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
 const PAGE_SIZE = 100;
 
+export type KalshiFetchStatus = "open" | "closed" | "settled" | "all";
+
 // Categories to exclude (sports betting)
 const SPORTS_CATEGORIES = ["Sports"];
 
-export async function fetchKalshiMarkets(
-  options: {
-    limit?: number;
-    excludeSports?: boolean;
-  } = {}
+function shouldIncludeMarket(
+  market: KalshiMarket,
+  status: KalshiFetchStatus
+): boolean {
+  switch (status) {
+    case "open":
+      return market.status === "open" || market.status === "active";
+    case "closed":
+      return market.status === "closed";
+    case "settled":
+      return market.status === "settled";
+    case "all":
+      return true;
+    default:
+      return market.status === "open" || market.status === "active";
+  }
+}
+
+async function fetchKalshiMarketsByStatus(
+  status: Exclude<KalshiFetchStatus, "all">,
+  limit: number,
+  excludeSports: boolean
 ): Promise<KalshiMarket[]> {
-  const { limit = 500, excludeSports = true } = options;
   const allMarkets: KalshiMarket[] = [];
   let cursor: string | undefined;
 
-  // Always fetch open events only
   while (allMarkets.length < limit) {
     const searchParams: Record<string, string | number | boolean> = {
-      status: "open", // Only open markets
+      status,
       limit: PAGE_SIZE,
       with_nested_markets: true,
     };
@@ -47,22 +64,19 @@ export async function fetchKalshiMarkets(
 
     if (events.length === 0) break;
 
-    // Filter events and extract markets
     for (const event of events) {
-      // Skip sports if excludeSports is true
       if (excludeSports && SPORTS_CATEGORIES.includes(event.category)) {
         continue;
       }
 
-      // Extract markets from event, adding category from parent event
       const markets = (event.markets ?? []).map((m) => ({
         ...m,
         category: event.category,
       }));
 
-      // Only add active/open markets
-      // Note: API returns "active" for open markets when using events endpoint
-      const filteredMarkets = markets.filter((m) => m.status === "active");
+      const filteredMarkets = markets.filter((m) =>
+        shouldIncludeMarket(m, status)
+      );
       allMarkets.push(...filteredMarkets);
 
       if (allMarkets.length >= limit) break;
@@ -72,8 +86,42 @@ export async function fetchKalshiMarkets(
 
     if (!cursor) break;
 
-    // Small delay to respect rate limits
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  return allMarkets.slice(0, limit);
+}
+
+export async function fetchKalshiMarkets(
+  options: {
+    limit?: number;
+    excludeSports?: boolean;
+    status?: KalshiFetchStatus;
+  } = {}
+): Promise<KalshiMarket[]> {
+  const { limit = 500, excludeSports = true, status = "open" } = options;
+
+  const statuses: Array<Exclude<KalshiFetchStatus, "all">> =
+    status === "all" ? ["open", "closed", "settled"] : [status];
+
+  const allMarkets: KalshiMarket[] = [];
+  const seen = new Set<string>();
+
+  for (const nextStatus of statuses) {
+    const remaining = Math.max(limit - allMarkets.length, 0);
+    if (remaining === 0) break;
+
+    const batch = await fetchKalshiMarketsByStatus(
+      nextStatus,
+      remaining,
+      excludeSports
+    );
+
+    for (const market of batch) {
+      if (seen.has(market.ticker)) continue;
+      seen.add(market.ticker);
+      allMarkets.push(market);
+    }
   }
 
   return allMarkets.slice(0, limit);

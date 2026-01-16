@@ -24,7 +24,7 @@
   - [x] Make CORS configurable via environment.
 - [ ] Add rate limiting for `/api/search` to control OpenAI costs.
   - [x] Add per-IP or per-API-key budgets.
-  - [ ] Return clear error responses when limits are exceeded.
+  - [x] Return clear error responses when limits are exceeded.
 
 ## Performance Optimizations
 - [ ] Replace per-row price updates with batch SQL update.

@@ -323,8 +323,14 @@ async function syncSource(
           .update(markets)
           .set({
             title: market.title,
+            subtitle: market.subtitle,
             description: market.description,
             rules: market.rules,
+            category: market.category,
+            tags: market.tags,
+            closeAt: market.closeAt,
+            url: market.url,
+            imageUrl: market.imageUrl,
             contentHash: market.contentHash,
             embeddingModel: EMBEDDING_MODEL,
             lastSyncedAt: new Date(),

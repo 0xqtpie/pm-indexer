@@ -17,7 +17,7 @@
   - [x] Add tests to ensure content changes trigger re-embedding when intended.
 
 ## Security and Cost Controls
-- [ ] Protect all `/api/admin/*` endpoints.
+- [x] Protect all `/api/admin/*` endpoints.
   - [x] Implement API key or JWT auth for admin routes.
   - [x] Add audit logging for sync triggers and failures.
 - [ ] Restrict CORS to known origins and allowed methods/headers.

@@ -1,23 +1,31 @@
 import ky from "ky";
-import type { KalshiMarket, KalshiMarketsResponse } from "../../types/kalshi.ts";
+import type {
+  KalshiMarket,
+  KalshiEventsResponse,
+} from "../../types/kalshi.ts";
 
 const BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
-const PAGE_SIZE = 200;
+const PAGE_SIZE = 100;
+
+// Categories to exclude (sports betting)
+const SPORTS_CATEGORIES = ["Sports"];
 
 export async function fetchKalshiMarkets(
   options: {
-    status?: "unopened" | "open" | "closed" | "settled";
     limit?: number;
+    excludeSports?: boolean;
   } = {}
 ): Promise<KalshiMarket[]> {
-  const { status = "open", limit = 500 } = options;
+  const { limit = 500, excludeSports = true } = options;
   const allMarkets: KalshiMarket[] = [];
   let cursor: string | undefined;
 
+  // Always fetch open events only
   while (allMarkets.length < limit) {
-    const searchParams: Record<string, string | number> = {
-      status,
+    const searchParams: Record<string, string | number | boolean> = {
+      status: "open", // Only open markets
       limit: PAGE_SIZE,
+      with_nested_markets: true,
     };
 
     if (cursor) {
@@ -25,7 +33,7 @@ export async function fetchKalshiMarkets(
     }
 
     const response = await ky
-      .get(`${BASE_URL}/markets`, {
+      .get(`${BASE_URL}/events`, {
         searchParams,
         timeout: 30000,
         retry: {
@@ -33,13 +41,33 @@ export async function fetchKalshiMarkets(
           delay: (attemptCount) => Math.min(1000 * 2 ** attemptCount, 10000),
         },
       })
-      .json<KalshiMarketsResponse>();
+      .json<KalshiEventsResponse>();
 
-    const markets = response.markets ?? [];
+    const events = response.events ?? [];
 
-    if (markets.length === 0) break;
+    if (events.length === 0) break;
 
-    allMarkets.push(...markets);
+    // Filter events and extract markets
+    for (const event of events) {
+      // Skip sports if excludeSports is true
+      if (excludeSports && SPORTS_CATEGORIES.includes(event.category)) {
+        continue;
+      }
+
+      // Extract markets from event, adding category from parent event
+      const markets = (event.markets ?? []).map((m) => ({
+        ...m,
+        category: event.category,
+      }));
+
+      // Only add active/open markets
+      // Note: API returns "active" for open markets when using events endpoint
+      const filteredMarkets = markets.filter((m) => m.status === "active");
+      allMarkets.push(...filteredMarkets);
+
+      if (allMarkets.length >= limit) break;
+    }
+
     cursor = response.cursor;
 
     if (!cursor) break;

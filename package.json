@@ -8,9 +8,13 @@
     "build": "bun build src/index.ts --outdir=dist --target=bun",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:search": "bun test tests/search.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:reset": "bun scripts/reset.ts",
+    "db:seed": "bun scripts/seed.ts"
   },
   "dependencies": {
     "hono": "^4.6.0",

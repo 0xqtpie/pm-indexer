@@ -12,10 +12,14 @@ export interface NormalizedMarket {
 
   // Content (for embedding)
   title: string;
+  subtitle?: string; // Choice label for multi-outcome markets (e.g., "Anthropic", "Above 50%")
   description: string;
   rules?: string;
   category?: string;
   tags: string[];
+
+  // Content hash for change detection (SHA-256 of title + description + rules)
+  contentHash: string;
 
   // Pricing
   yesPrice: number; // 0-1 probability
@@ -57,4 +61,21 @@ export function buildEmbeddingText(market: NormalizedMarket): string {
   ].filter(Boolean);
 
   return parts.join("\n\n");
+}
+
+/**
+ * Compute a content hash for change detection.
+ * Uses SHA-256 of the embedding-relevant content.
+ */
+export async function computeContentHash(
+  title: string,
+  description: string,
+  rules?: string
+): Promise<string> {
+  const content = [title, description, rules].filter(Boolean).join("\n");
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }

@@ -1,4 +1,5 @@
-export type KalshiMarketStatus = "unopened" | "open" | "closed" | "settled";
+// Note: Events endpoint returns "active" instead of "open" for market status
+export type KalshiMarketStatus = "unopened" | "open" | "active" | "closed" | "settled";
 
 export interface KalshiMarket {
   ticker: string;
@@ -10,6 +11,8 @@ export interface KalshiMarket {
   yes_ask: number;
   no_bid: number;
   no_ask: number;
+  yes_sub_title?: string; // Choice label for multi-outcome markets (e.g., "Anthropic")
+  no_sub_title?: string;  // Usually "Not {yes_sub_title}" or same as yes_sub_title
   last_price: number;
   volume: number;
   volume_24h: number;
@@ -32,6 +35,7 @@ export interface KalshiEvent {
   category: string;
   mutually_exclusive: boolean;
   strike_date?: string;
+  markets?: KalshiMarket[]; // Nested markets when using with_nested_markets
 }
 
 export interface KalshiMarketsResponse {

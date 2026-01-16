@@ -4,19 +4,14 @@ import { z } from "zod";
 import { db, markets } from "../db/index.ts";
 import { eq } from "drizzle-orm";
 import { generateEmbedding } from "../services/embedding/openai.ts";
-import { search, ensureCollection } from "../services/search/qdrant.ts";
-import { fetchPolymarketMarkets } from "../services/ingestion/polymarket.ts";
-import { fetchKalshiMarkets } from "../services/ingestion/kalshi.ts";
+import { search } from "../services/search/qdrant.ts";
+import { getSyncStatus } from "../services/sync/index.ts";
 import {
-  normalizePolymarketMarket,
-  normalizeKalshiMarket,
-} from "../services/ingestion/normalizer.ts";
-import {
-  generateMarketEmbeddings,
-  EMBEDDING_MODEL,
-} from "../services/embedding/openai.ts";
-import { upsertMarkets } from "../services/search/qdrant.ts";
-import type { NewMarket } from "../db/schema.ts";
+  triggerIncrementalSync,
+  triggerFullSync,
+  isSchedulerRunning,
+} from "../services/scheduler/index.ts";
+import { config } from "../config.ts";
 
 const app = new Hono();
 
@@ -73,6 +68,7 @@ app.get("/api/search", async (c) => {
         source: r.source,
         sourceId: r.sourceId,
         title: r.title,
+        subtitle: r.subtitle,
         description: r.description,
         yesPrice: r.yesPrice,
         noPrice: r.noPrice,
@@ -155,90 +151,86 @@ app.get("/api/markets", async (c) => {
   }
 });
 
-// Admin sync endpoint
+// Get sync status
+app.get("/api/admin/sync/status", (c) => {
+  const status = getSyncStatus();
+  return c.json({
+    ...status,
+    schedulerRunning: isSchedulerRunning(),
+    config: {
+      syncIntervalMinutes: config.SYNC_INTERVAL_MINUTES,
+      fullSyncHour: config.FULL_SYNC_HOUR,
+      marketFetchLimit: config.MARKET_FETCH_LIMIT,
+      autoSyncEnabled: config.ENABLE_AUTO_SYNC,
+    },
+  });
+});
+
+// Trigger incremental sync (updates prices, only embeds new/changed markets)
 app.post("/api/admin/sync", async (c) => {
   try {
-    console.log("Starting sync...");
-
-    // Fetch markets
-    const [polymarketRaw, kalshiRaw] = await Promise.all([
-      fetchPolymarketMarkets({ limit: 200 }),
-      fetchKalshiMarkets({ limit: 200 }),
-    ]);
-
-    // Normalize
-    const normalizedMarkets = [
-      ...polymarketRaw.map(normalizePolymarketMarket),
-      ...kalshiRaw.map(normalizeKalshiMarket),
-    ];
-
-    // Generate embeddings
-    const embeddings = await generateMarketEmbeddings(normalizedMarkets);
-
-    // Ensure collection exists
-    await ensureCollection();
-
-    // Upsert to Qdrant
-    await upsertMarkets(normalizedMarkets, embeddings);
-
-    // Save to Postgres
-    const dbRecords: NewMarket[] = normalizedMarkets.map((m) => ({
-      id: m.id,
-      sourceId: m.sourceId,
-      source: m.source,
-      title: m.title,
-      description: m.description,
-      rules: m.rules,
-      category: m.category,
-      tags: m.tags,
-      yesPrice: m.yesPrice,
-      noPrice: m.noPrice,
-      lastPrice: m.lastPrice,
-      volume: m.volume,
-      volume24h: m.volume24h,
-      liquidity: m.liquidity,
-      status: m.status,
-      result: m.result,
-      createdAt: m.createdAt,
-      openAt: m.openAt,
-      closeAt: m.closeAt,
-      expiresAt: m.expiresAt,
-      url: m.url,
-      imageUrl: m.imageUrl,
-      embeddingModel: EMBEDDING_MODEL,
-      lastSyncedAt: m.lastSyncedAt,
-    }));
-
-    for (const record of dbRecords) {
-      await db
-        .insert(markets)
-        .values(record)
-        .onConflictDoUpdate({
-          target: markets.id,
-          set: {
-            title: record.title,
-            description: record.description,
-            yesPrice: record.yesPrice,
-            noPrice: record.noPrice,
-            volume: record.volume,
-            volume24h: record.volume24h,
-            status: record.status,
-            lastSyncedAt: new Date(),
-          },
-        });
-    }
+    const result = await triggerIncrementalSync();
 
     return c.json({
       success: true,
+      type: "incremental",
       synced: {
-        polymarket: polymarketRaw.length,
-        kalshi: kalshiRaw.length,
-        total: normalizedMarkets.length,
+        polymarket: {
+          fetched: result.polymarket.fetched,
+          new: result.polymarket.newMarkets,
+          priceUpdates: result.polymarket.updatedPrices,
+          contentChanged: result.polymarket.contentChanged,
+          embeddings: result.polymarket.embeddingsGenerated,
+        },
+        kalshi: {
+          fetched: result.kalshi.fetched,
+          new: result.kalshi.newMarkets,
+          priceUpdates: result.kalshi.updatedPrices,
+          contentChanged: result.kalshi.contentChanged,
+          embeddings: result.kalshi.embeddingsGenerated,
+        },
+        total: result.polymarket.fetched + result.kalshi.fetched,
       },
+      durationMs: result.totalDurationMs,
     });
   } catch (error) {
     console.error("Sync error:", error);
-    return c.json({ error: "Sync failed" }, 500);
+    const message = error instanceof Error ? error.message : "Sync failed";
+    return c.json({ error: message }, 500);
+  }
+});
+
+// Trigger full sync (includes closed markets, updates status)
+app.post("/api/admin/sync/full", async (c) => {
+  try {
+    const result = await triggerFullSync();
+
+    return c.json({
+      success: true,
+      type: "full",
+      synced: {
+        polymarket: {
+          fetched: result.polymarket.fetched,
+          new: result.polymarket.newMarkets,
+          priceUpdates: result.polymarket.updatedPrices,
+          contentChanged: result.polymarket.contentChanged,
+          embeddings: result.polymarket.embeddingsGenerated,
+        },
+        kalshi: {
+          fetched: result.kalshi.fetched,
+          new: result.kalshi.newMarkets,
+          priceUpdates: result.kalshi.updatedPrices,
+          contentChanged: result.kalshi.contentChanged,
+          embeddings: result.kalshi.embeddingsGenerated,
+        },
+        total: result.polymarket.fetched + result.kalshi.fetched,
+      },
+      durationMs: result.totalDurationMs,
+    });
+  } catch (error) {
+    console.error("Full sync error:", error);
+    const message = error instanceof Error ? error.message : "Full sync failed";
+    return c.json({ error: message }, 500);
   }
 });
 

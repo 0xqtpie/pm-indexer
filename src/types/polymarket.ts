@@ -12,8 +12,11 @@ export interface PolymarketEvent {
   startDate: string;
   endDate: string;
   closed: boolean;
+  active: boolean;
   archived: boolean;
   image: string;
+  tags?: PolymarketTag[];
+  markets?: PolymarketMarket[]; // Nested markets when fetching from events endpoint
 }
 
 export interface PolymarketMarket {
@@ -36,6 +39,7 @@ export interface PolymarketMarket {
   icon: string;
   tags?: PolymarketTag[];
   events?: PolymarketEvent[];
+  groupItemTitle?: string; // Choice label for multi-outcome markets (e.g., "Google", "December 31, 2026")
 }
 
 export interface PolymarketMarketsResponse {

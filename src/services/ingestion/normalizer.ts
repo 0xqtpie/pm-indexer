@@ -1,10 +1,30 @@
 import type { NormalizedMarket, MarketStatus } from "../../types/market.ts";
+import { computeContentHash } from "../../types/market.ts";
 import type { PolymarketMarket } from "../../types/polymarket.ts";
 import type { KalshiMarket, KalshiMarketStatus } from "../../types/kalshi.ts";
 
-function parsePolymarketPrice(prices: string[]): { yes: number; no: number } {
-  const yesPrice = parseFloat(prices[0] ?? "0.5");
-  const noPrice = parseFloat(prices[1] ?? "0.5");
+function parsePolymarketPrice(prices?: string[] | string): { yes: number; no: number } {
+  // Handle missing prices
+  if (!prices) {
+    return { yes: 0.5, no: 0.5 };
+  }
+
+  // Polymarket API returns outcomePrices as a JSON string, not an array
+  let priceArray: string[];
+  if (typeof prices === "string") {
+    try {
+      priceArray = JSON.parse(prices);
+    } catch {
+      return { yes: 0.5, no: 0.5 };
+    }
+  } else if (Array.isArray(prices)) {
+    priceArray = prices;
+  } else {
+    return { yes: 0.5, no: 0.5 };
+  }
+
+  const yesPrice = parseFloat(priceArray[0] ?? "0.5");
+  const noPrice = parseFloat(priceArray[1] ?? "0.5");
   return {
     yes: isNaN(yesPrice) ? 0.5 : yesPrice,
     no: isNaN(noPrice) ? 0.5 : noPrice,
@@ -17,21 +37,26 @@ function parsePolymarketStatus(market: PolymarketMarket): MarketStatus {
   return "open";
 }
 
-export function normalizePolymarketMarket(
+export async function normalizePolymarketMarket(
   market: PolymarketMarket
-): NormalizedMarket {
+): Promise<NormalizedMarket> {
   const prices = parsePolymarketPrice(market.outcomePrices);
+  const title = market.question;
+  const description = market.description ?? "";
+  const contentHash = await computeContentHash(title, description, undefined);
 
   return {
     id: crypto.randomUUID(),
     sourceId: market.id,
     source: "polymarket",
 
-    title: market.question,
-    description: market.description ?? "",
+    title,
+    subtitle: market.groupItemTitle, // Choice label for multi-outcome markets
+    description,
     rules: undefined,
     category: market.tags?.[0]?.label,
     tags: market.tags?.map((t) => t.label) ?? [],
+    contentHash,
 
     yesPrice: prices.yes,
     noPrice: prices.no,
@@ -60,6 +85,7 @@ export function normalizePolymarketMarket(
 function parseKalshiStatus(status: KalshiMarketStatus): MarketStatus {
   switch (status) {
     case "open":
+    case "active": // Events endpoint returns "active" instead of "open"
     case "unopened":
       return "open";
     case "closed":
@@ -71,21 +97,29 @@ function parseKalshiStatus(status: KalshiMarketStatus): MarketStatus {
   }
 }
 
-export function normalizeKalshiMarket(market: KalshiMarket): NormalizedMarket {
+export async function normalizeKalshiMarket(
+  market: KalshiMarket
+): Promise<NormalizedMarket> {
   // Kalshi prices are in cents (0-100), convert to 0-1
   const yesPrice = (market.yes_bid + market.yes_ask) / 2 / 100;
   const noPrice = (market.no_bid + market.no_ask) / 2 / 100;
+  const title = market.title;
+  const description = market.subtitle ?? "";
+  const rules = market.rules_primary ?? undefined;
+  const contentHash = await computeContentHash(title, description, rules);
 
   return {
     id: crypto.randomUUID(),
     sourceId: market.ticker,
     source: "kalshi",
 
-    title: market.title,
-    description: market.subtitle ?? "",
-    rules: market.rules_primary ?? undefined,
+    title,
+    subtitle: market.yes_sub_title, // Choice label for multi-outcome markets
+    description,
+    rules,
     category: market.category,
     tags: market.tags ?? [],
+    contentHash,
 
     yesPrice: isNaN(yesPrice) ? 0.5 : yesPrice,
     noPrice: isNaN(noPrice) ? 0.5 : noPrice,
@@ -113,18 +147,19 @@ export function normalizeKalshiMarket(market: KalshiMarket): NormalizedMarket {
   };
 }
 
-export function normalizeMarkets(
+export async function normalizeMarkets(
   polymarketMarkets: PolymarketMarket[],
   kalshiMarkets: KalshiMarket[]
-): NormalizedMarket[] {
+): Promise<NormalizedMarket[]> {
   const normalized: NormalizedMarket[] = [];
 
+  // Process in batches to avoid overwhelming with promises
   for (const market of polymarketMarkets) {
-    normalized.push(normalizePolymarketMarket(market));
+    normalized.push(await normalizePolymarketMarket(market));
   }
 
   for (const market of kalshiMarkets) {
-    normalized.push(normalizeKalshiMarket(market));
+    normalized.push(await normalizeKalshiMarket(market));
   }
 
   return normalized;

@@ -39,6 +39,7 @@ export async function upsertMarkets(
         source: market.source,
         sourceId: market.sourceId,
         title: market.title,
+        subtitle: market.subtitle ?? null,
         description: market.description.slice(0, 1000), // Truncate for payload
         status: market.status,
         yesPrice: market.yesPrice,
@@ -75,6 +76,7 @@ export interface SearchResult {
   source: string;
   sourceId: string;
   title: string;
+  subtitle: string | null;
   description: string;
   status: string;
   yesPrice: number;
@@ -117,6 +119,7 @@ export async function search(
     source: r.payload?.source as string,
     sourceId: r.payload?.sourceId as string,
     title: r.payload?.title as string,
+    subtitle: (r.payload?.subtitle as string) ?? null,
     description: r.payload?.description as string,
     status: r.payload?.status as string,
     yesPrice: r.payload?.yesPrice as number,

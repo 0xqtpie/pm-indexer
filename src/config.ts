@@ -11,8 +11,11 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
 
   // Sync settings
-  SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(10),
+  SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(30),
   FULL_SYNC_HOUR: z.coerce.number().int().min(0).max(23).default(3),
+  MARKET_FETCH_LIMIT: z.coerce.number().int().positive().default(10000),
+  ENABLE_AUTO_SYNC: z.coerce.boolean().default(false),
+  EXCLUDE_SPORTS: z.coerce.boolean().default(true),
 
   // Server
   PORT: z.coerce.number().int().positive().default(3000),

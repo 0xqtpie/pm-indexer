@@ -136,6 +136,57 @@ This starts:
 - `pm-indexer-db-1` - PostgreSQL database (port 5432)
 - `pm-indexer-qdrant-1` - Qdrant vector database (port 6333)
 
+## Intelligent Sync System
+
+The indexer includes an intelligent sync system that minimizes API calls and embedding costs:
+
+### Incremental Sync (Default)
+
+- **Frequency:** Every 30 minutes (configurable via `SYNC_INTERVAL_MINUTES`)
+- **Behavior:**
+  - Updates prices for existing markets (no embedding cost)
+  - Generates embeddings only for NEW markets
+  - Re-generates embeddings only if content (title/description/rules) changed
+  - Uses content hash (SHA-256) to detect changes
+
+### Full Sync
+
+- **Frequency:** Daily at 3 AM (configurable via `FULL_SYNC_HOUR`)
+- **Behavior:**
+  - Fetches all markets including closed/settled
+  - Updates market status (open → closed → settled)
+  - Same intelligent embedding logic as incremental
+
+### Cost Optimization
+
+For a typical sync of 10,000 markets per source:
+- **Incremental sync:** Only ~10-50 new embeddings per run (~$0.001)
+- **Full sync:** Similar cost, plus status updates for closed markets
+- **Initial seed:** Full embedding cost (~$0.72 for 60,000 markets)
+
+### Configuration
+
+```bash
+# .env
+SYNC_INTERVAL_MINUTES=30    # Incremental sync interval
+FULL_SYNC_HOUR=3            # Hour for daily full sync (0-23)
+MARKET_FETCH_LIMIT=10000    # Max markets per source
+ENABLE_AUTO_SYNC=true       # Enable background scheduler
+```
+
+### Manual Triggers
+
+```bash
+# Incremental sync
+curl -X POST http://localhost:3000/api/admin/sync
+
+# Full sync
+curl -X POST http://localhost:3000/api/admin/sync/full
+
+# Check status
+curl http://localhost:3000/api/admin/sync/status
+```
+
 ## API Reference
 
 ### Health Check
@@ -271,9 +322,35 @@ GET /api/markets?limit=<n>&offset=<n>&source=<source>&status=<status>
 curl "http://localhost:3000/api/markets?limit=10&offset=0"
 ```
 
-### Trigger Sync (Admin)
+### Sync Status
 
-Manually trigger a data sync from Polymarket and Kalshi:
+Get the current sync status and configuration:
+
+```bash
+GET /api/admin/sync/status
+```
+
+**Response:**
+
+```json
+{
+  "isSyncing": false,
+  "lastSyncTime": "2024-01-15T12:00:00.000Z",
+  "lastFullSyncTime": "2024-01-15T03:00:00.000Z",
+  "lastSyncResult": { ... },
+  "schedulerRunning": true,
+  "config": {
+    "syncIntervalMinutes": 30,
+    "fullSyncHour": 3,
+    "marketFetchLimit": 10000,
+    "autoSyncEnabled": true
+  }
+}
+```
+
+### Incremental Sync (Admin)
+
+Trigger an incremental sync - updates prices for existing markets, generates embeddings only for new or content-changed markets:
 
 ```bash
 POST /api/admin/sync
@@ -290,12 +367,40 @@ curl -X POST "http://localhost:3000/api/admin/sync"
 ```json
 {
   "success": true,
+  "type": "incremental",
   "synced": {
-    "polymarket": 200,
-    "kalshi": 200,
-    "total": 400
-  }
+    "polymarket": {
+      "fetched": 500,
+      "new": 10,
+      "priceUpdates": 490,
+      "contentChanged": 2,
+      "embeddings": 12
+    },
+    "kalshi": {
+      "fetched": 500,
+      "new": 5,
+      "priceUpdates": 495,
+      "contentChanged": 0,
+      "embeddings": 5
+    },
+    "total": 1000
+  },
+  "durationMs": 15234
 }
+```
+
+### Full Sync (Admin)
+
+Trigger a full sync - includes closed/settled markets and updates status:
+
+```bash
+POST /api/admin/sync/full
+```
+
+**Example:**
+
+```bash
+curl -X POST "http://localhost:3000/api/admin/sync/full"
 ```
 
 ## Project Structure
@@ -323,8 +428,12 @@ pm-indexer/
 │   │   │   ├── polymarket.ts
 │   │   │   ├── kalshi.ts
 │   │   │   └── normalizer.ts
-│   │   └── search/
-│   │       └── qdrant.ts   # Vector search
+│   │   ├── search/
+│   │   │   └── qdrant.ts   # Vector search
+│   │   ├── sync/
+│   │   │   └── index.ts    # Intelligent sync service
+│   │   └── scheduler/
+│   │       └── index.ts    # Background sync scheduler
 │   └── types/
 │       ├── market.ts       # Normalized types
 │       ├── polymarket.ts   # Polymarket API types

@@ -17,7 +17,24 @@ import { config } from "../config.ts";
 const app = new Hono();
 
 // Middleware
-app.use("/*", cors());
+const corsOrigins = config.CORS_ORIGINS.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const corsMethods = config.CORS_METHODS.split(",")
+  .map((method) => method.trim())
+  .filter(Boolean);
+const corsHeaders = config.CORS_HEADERS.split(",")
+  .map((header) => header.trim())
+  .filter(Boolean);
+
+app.use(
+  "/*",
+  cors({
+    origin: corsOrigins.includes("*") || corsOrigins.length === 0 ? "*" : corsOrigins,
+    allowMethods: corsMethods,
+    allowHeaders: corsHeaders,
+  })
+);
 
 const requireAdminKey = async (c: Context, next: Next) => {
   if (!config.ADMIN_API_KEY) {

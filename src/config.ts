@@ -20,6 +20,11 @@ const envSchema = z.object({
   // Admin auth
   ADMIN_API_KEY: z.string().min(1).optional(),
 
+  // CORS
+  CORS_ORIGINS: z.string().default("*"),
+  CORS_METHODS: z.string().default("GET,POST,OPTIONS"),
+  CORS_HEADERS: z.string().default("Content-Type,Authorization,X-Admin-Key,X-API-Key"),
+
   // Server
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

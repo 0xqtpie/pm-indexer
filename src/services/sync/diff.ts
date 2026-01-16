@@ -41,6 +41,10 @@ export function categorizeMarkets(
       continue;
     }
 
+    if (market.id !== existing.id) {
+      market.id = existing.id;
+    }
+
     marketsToUpdatePrices.push({
       id: existing.id,
       yesPrice: market.yesPrice,

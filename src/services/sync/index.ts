@@ -10,7 +10,11 @@ import {
   generateMarketEmbeddings,
   EMBEDDING_MODEL,
 } from "../embedding/openai.ts";
-import { ensureCollection, upsertMarkets } from "../search/qdrant.ts";
+import {
+  ensureCollection,
+  upsertMarkets,
+  updateMarketPayloads,
+} from "../search/qdrant.ts";
 import { config } from "../../config.ts";
 import type { NormalizedMarket, MarketSource } from "../../types/market.ts";
 import type { NewMarket, Market } from "../../db/schema.ts";
@@ -291,14 +295,28 @@ async function syncSource(
             noPrice: update.noPrice,
             volume: update.volume,
             volume24h: update.volume24h,
-          status: update.status,
+            status: update.status,
             lastSyncedAt: new Date(),
           })
           .where(eq(markets.id, update.id));
       }
     }
 
-    // Step 7: Update content for changed markets
+    // Step 7: Refresh payloads for existing markets (price/status changes)
+    if (marketsToUpdatePrices.length > 0) {
+      const embeddingIds = new Set(
+        marketsNeedingEmbeddings.map((market) => market.id)
+      );
+      const payloadRefreshMarkets = normalizedMarkets.filter(
+        (market) =>
+          existingBySourceId.has(market.sourceId) &&
+          !embeddingIds.has(market.id)
+      );
+
+      await updateMarketPayloads(payloadRefreshMarkets);
+    }
+
+    // Step 8: Update content for changed markets
     for (const market of marketsNeedingEmbeddings) {
       if (existingBySourceId.has(market.sourceId)) {
         await db

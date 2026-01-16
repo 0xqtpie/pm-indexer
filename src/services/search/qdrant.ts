@@ -26,6 +26,25 @@ export async function ensureCollection(): Promise<void> {
   }
 }
 
+function buildMarketPayload(market: NormalizedMarket) {
+  return {
+    source: market.source,
+    sourceId: market.sourceId,
+    title: market.title,
+    subtitle: market.subtitle ?? null,
+    description: market.description.slice(0, 1000), // Truncate for payload
+    status: market.status,
+    yesPrice: market.yesPrice,
+    noPrice: market.noPrice,
+    volume: market.volume,
+    volume24h: market.volume24h,
+    closeAt: market.closeAt?.toISOString() ?? null,
+    url: market.url,
+    tags: market.tags,
+    category: market.category ?? null,
+  };
+}
+
 export async function upsertMarkets(
   markets: NormalizedMarket[],
   embeddings: Map<string, number[]>
@@ -35,22 +54,7 @@ export async function upsertMarkets(
     .map((market) => ({
       id: market.id,
       vector: embeddings.get(market.id)!,
-      payload: {
-        source: market.source,
-        sourceId: market.sourceId,
-        title: market.title,
-        subtitle: market.subtitle ?? null,
-        description: market.description.slice(0, 1000), // Truncate for payload
-        status: market.status,
-        yesPrice: market.yesPrice,
-        noPrice: market.noPrice,
-        volume: market.volume,
-        volume24h: market.volume24h,
-        closeAt: market.closeAt?.toISOString() ?? null,
-        url: market.url,
-        tags: market.tags,
-        category: market.category ?? null,
-      },
+      payload: buildMarketPayload(market),
     }));
 
   // Upsert in batches of 100
@@ -60,6 +64,28 @@ export async function upsertMarkets(
     await qdrant.upsert(COLLECTION_NAME, {
       wait: true,
       points: batch,
+    });
+  }
+}
+
+export async function updateMarketPayloads(
+  markets: NormalizedMarket[]
+): Promise<void> {
+  if (markets.length === 0) return;
+
+  const operations = markets.map((market) => ({
+    set_payload: {
+      points: [market.id],
+      payload: buildMarketPayload(market),
+    },
+  }));
+
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < operations.length; i += BATCH_SIZE) {
+    const batch = operations.slice(i, i + BATCH_SIZE);
+    await qdrant.batchUpdate(COLLECTION_NAME, {
+      wait: true,
+      operations: batch,
     });
   }
 }

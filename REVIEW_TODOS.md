@@ -3,7 +3,7 @@
 ## Data Correctness (Highest Priority)
 - [ ] Fix "full sync" to include closed/settled markets (not open-only).
   - [ ] Update ingestion fetchers to support status filtering beyond open only.
-    - [ ] Polymarket: add configurable `closed`/`archived` options or a dedicated full-sync mode.
+    - [x] Polymarket: add configurable `closed`/`archived` options or a dedicated full-sync mode.
     - [ ] Kalshi: allow fetching closed/settled markets via status filters.
   - [ ] Adjust full sync orchestration to request open+closed+settled (or all) based on mode.
   - [ ] Add tests that verify status transitions (open -> closed -> settled) are ingested.
@@ -13,7 +13,7 @@
   - [ ] Add a test that verifies price/status updates are visible via `/api/search`.
 - [ ] Expand content updates beyond title/description/rules.
   - [ ] Update sync to also refresh subtitle, tags, category, closeAt, url, imageUrl.
-  - [ ] Expand content hash inputs to include subtitle/tags/category/rules if they should drive re-embedding.
+  - [ ] Keep content hash inputs limited to title + description + rules (no tags/category/subtitle).
   - [ ] Add tests to ensure content changes trigger re-embedding when intended.
 
 ## Security and Cost Controls

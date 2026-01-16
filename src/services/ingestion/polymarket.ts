@@ -4,6 +4,8 @@ import type { PolymarketMarket, PolymarketEvent } from "../../types/polymarket.t
 const BASE_URL = "https://gamma-api.polymarket.com";
 const PAGE_SIZE = 100;
 
+export type PolymarketFetchStatus = "open" | "closed" | "settled" | "all";
+
 // Sports-related tags to filter out
 const SPORTS_TAGS = [
   "Sports",
@@ -37,23 +39,48 @@ function isSportsMarket(market: PolymarketMarket): boolean {
   );
 }
 
-export async function fetchPolymarketMarkets(
-  options: {
-    limit?: number;
-    excludeSports?: boolean;
-  } = {}
+function shouldIncludeMarket(
+  market: PolymarketMarket,
+  status: PolymarketFetchStatus,
+  excludeSports: boolean
+): boolean {
+  if (excludeSports && isSportsMarket(market)) return false;
+
+  switch (status) {
+    case "open":
+      return !market.closed && !market.archived;
+    case "closed":
+      return market.closed && !market.archived;
+    case "settled":
+      return market.archived;
+    case "all":
+      return true;
+    default:
+      return !market.closed && !market.archived;
+  }
+}
+
+async function fetchPolymarketMarketsByStatus(
+  status: Exclude<PolymarketFetchStatus, "all">,
+  limit: number,
+  excludeSports: boolean
 ): Promise<PolymarketMarket[]> {
-  const { limit = 500, excludeSports = true } = options;
   const allMarkets: PolymarketMarket[] = [];
   let offset = 0;
 
-  // Always fetch open markets only
   while (allMarkets.length < limit) {
     const searchParams: Record<string, string | number | boolean> = {
-      closed: false, // Only open markets
       limit: PAGE_SIZE,
       offset,
     };
+
+    if (status === "open") {
+      searchParams.closed = false;
+    } else if (status === "closed") {
+      searchParams.closed = true;
+    } else if (status === "settled") {
+      searchParams.archived = true;
+    }
 
     const response = await ky
       .get(`${BASE_URL}/events`, {
@@ -78,13 +105,9 @@ export async function fetchPolymarketMarkets(
         tags: m.tags ?? event.tags,
       }));
 
-      // Filter: only open markets (not closed or archived), optionally exclude sports
-      const filteredMarkets = markets.filter((m) => {
-        if (m.closed) return false; // Skip closed markets
-        if (m.archived) return false; // Skip archived markets
-        if (excludeSports && isSportsMarket(m)) return false;
-        return true;
-      });
+      const filteredMarkets = markets.filter((m) =>
+        shouldIncludeMarket(m, status, excludeSports)
+      );
 
       allMarkets.push(...filteredMarkets);
 
@@ -95,6 +118,41 @@ export async function fetchPolymarketMarkets(
 
     // Small delay to respect rate limits
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  return allMarkets.slice(0, limit);
+}
+
+export async function fetchPolymarketMarkets(
+  options: {
+    limit?: number;
+    excludeSports?: boolean;
+    status?: PolymarketFetchStatus;
+  } = {}
+): Promise<PolymarketMarket[]> {
+  const { limit = 500, excludeSports = true, status = "open" } = options;
+
+  const statuses: Array<Exclude<PolymarketFetchStatus, "all">> =
+    status === "all" ? ["open", "closed", "settled"] : [status];
+
+  const allMarkets: PolymarketMarket[] = [];
+  const seen = new Set<string>();
+
+  for (const nextStatus of statuses) {
+    const remaining = Math.max(limit - allMarkets.length, 0);
+    if (remaining === 0) break;
+
+    const batch = await fetchPolymarketMarketsByStatus(
+      nextStatus,
+      remaining,
+      excludeSports
+    );
+
+    for (const market of batch) {
+      if (seen.has(market.id)) continue;
+      seen.add(market.id);
+      allMarkets.push(market);
+    }
   }
 
   return allMarkets.slice(0, limit);

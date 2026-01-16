@@ -19,7 +19,7 @@
 ## Security and Cost Controls
 - [ ] Protect all `/api/admin/*` endpoints.
   - [x] Implement API key or JWT auth for admin routes.
-  - [ ] Add audit logging for sync triggers and failures.
+  - [x] Add audit logging for sync triggers and failures.
 - [ ] Restrict CORS to known origins and allowed methods/headers.
   - [ ] Make CORS configurable via environment.
 - [ ] Add rate limiting for `/api/search` to control OpenAI costs.

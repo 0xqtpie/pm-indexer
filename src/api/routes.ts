@@ -191,6 +191,13 @@ app.get("/api/admin/sync/status", (c) => {
 
 // Trigger incremental sync (updates prices, only embeds new/changed markets)
 app.post("/api/admin/sync", async (c) => {
+  const requestMeta = {
+    ip: c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "unknown",
+    userAgent: c.req.header("user-agent") ?? "unknown",
+  };
+
+  console.log("Admin sync triggered (incremental)", requestMeta);
+
   try {
     const result = await triggerIncrementalSync();
 
@@ -217,7 +224,7 @@ app.post("/api/admin/sync", async (c) => {
       durationMs: result.totalDurationMs,
     });
   } catch (error) {
-    console.error("Sync error:", error);
+    console.error("Sync error:", { error, ...requestMeta });
     const message = error instanceof Error ? error.message : "Sync failed";
     return c.json({ error: message }, 500);
   }
@@ -225,6 +232,13 @@ app.post("/api/admin/sync", async (c) => {
 
 // Trigger full sync (includes closed markets, updates status)
 app.post("/api/admin/sync/full", async (c) => {
+  const requestMeta = {
+    ip: c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "unknown",
+    userAgent: c.req.header("user-agent") ?? "unknown",
+  };
+
+  console.log("Admin sync triggered (full)", requestMeta);
+
   try {
     const result = await triggerFullSync();
 
@@ -251,7 +265,7 @@ app.post("/api/admin/sync/full", async (c) => {
       durationMs: result.totalDurationMs,
     });
   } catch (error) {
-    console.error("Full sync error:", error);
+    console.error("Full sync error:", { error, ...requestMeta });
     const message = error instanceof Error ? error.message : "Full sync failed";
     return c.json({ error: message }, 500);
   }

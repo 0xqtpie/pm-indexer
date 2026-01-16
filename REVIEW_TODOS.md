@@ -22,7 +22,7 @@
   - [x] Add audit logging for sync triggers and failures.
 - [x] Restrict CORS to known origins and allowed methods/headers.
   - [x] Make CORS configurable via environment.
-- [ ] Add rate limiting for `/api/search` to control OpenAI costs.
+- [x] Add rate limiting for `/api/search` to control OpenAI costs.
   - [x] Add per-IP or per-API-key budgets.
   - [x] Return clear error responses when limits are exceeded.
 

@@ -9,7 +9,7 @@
   - [x] Add tests that verify status transitions (open -> closed -> settled) are ingested.
 - [ ] Ensure search payload reflects live prices/status.
   - [x] Update Qdrant payload on every price/status change, even without re-embedding.
-  - [ ] Add a fast path to refresh payload fields without re-upserting vectors.
+  - [x] Add a fast path to refresh payload fields without re-upserting vectors.
   - [ ] Add a test that verifies price/status updates are visible via `/api/search`.
 - [ ] Expand content updates beyond title/description/rules.
   - [ ] Update sync to also refresh subtitle, tags, category, closeAt, url, imageUrl.

@@ -20,7 +20,7 @@
 - [x] Protect all `/api/admin/*` endpoints.
   - [x] Implement API key or JWT auth for admin routes.
   - [x] Add audit logging for sync triggers and failures.
-- [ ] Restrict CORS to known origins and allowed methods/headers.
+- [x] Restrict CORS to known origins and allowed methods/headers.
   - [x] Make CORS configurable via environment.
 - [ ] Add rate limiting for `/api/search` to control OpenAI costs.
   - [ ] Add per-IP or per-API-key budgets.

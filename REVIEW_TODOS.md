@@ -7,7 +7,7 @@
     - [x] Kalshi: allow fetching closed/settled markets via status filters.
   - [x] Adjust full sync orchestration to request open+closed+settled (or all) based on mode.
   - [x] Add tests that verify status transitions (open -> closed -> settled) are ingested.
-- [ ] Ensure search payload reflects live prices/status.
+- [x] Ensure search payload reflects live prices/status.
   - [x] Update Qdrant payload on every price/status change, even without re-embedding.
   - [x] Add a fast path to refresh payload fields without re-upserting vectors.
   - [x] Add a test that verifies price/status updates are visible via `/api/search`.

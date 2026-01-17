@@ -901,4 +901,4 @@ async function evaluateAlerts(
   }
 }
 
-export { summarizeSyncResults, SyncSourceError, SyncRunError };
+export { summarizeSyncResults, SyncSourceError, SyncRunError, evaluateAlerts };

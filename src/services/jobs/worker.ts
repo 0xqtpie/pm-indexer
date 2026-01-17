@@ -115,7 +115,19 @@ export async function runJobWorkerOnce(workerId: string): Promise<number> {
       LIMIT ${DEFAULT_BATCH_SIZE}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING *
+    RETURNING
+      id,
+      type,
+      status,
+      payload,
+      attempts,
+      max_attempts AS "maxAttempts",
+      run_at AS "runAt",
+      locked_at AS "lockedAt",
+      locked_by AS "lockedBy",
+      last_error AS "lastError",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
   `)) as Job[];
 
   if (rows.length === 0) {

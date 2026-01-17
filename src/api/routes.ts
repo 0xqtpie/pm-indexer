@@ -745,14 +745,16 @@ app.get("/api/markets", async (c) => {
         );
       }
 
-      const cursorValue =
+      const cursorParam =
         sort === "volume" || sort === "volume24h"
-          ? Number(decoded.lastValue)
-          : new Date(String(decoded.lastValue));
+          ? sql.param(Number(decoded.lastValue), markets.volume)
+          : sort === "closeAt"
+          ? sql.param(new Date(String(decoded.lastValue)), markets.closeAt)
+          : sql.param(new Date(String(decoded.lastValue)), markets.createdAt);
       const operator = order === "asc" ? ">" : "<";
       const sortExpr = getSortExpression(sort, order);
       conditions.push(
-        sql`(${sortExpr} ${sql.raw(operator)} ${cursorValue} OR (${sortExpr} = ${cursorValue} AND ${markets.id} ${sql.raw(operator)} ${decoded.lastId}))`
+        sql`(${sortExpr} ${sql.raw(operator)} ${cursorParam} OR (${sortExpr} = ${cursorParam} AND ${markets.id} ${sql.raw(operator)} ${sql.param(decoded.lastId, markets.id)}))`
       );
     }
 
@@ -1135,9 +1137,12 @@ app.get("/api/markets/:id/history", async (c) => {
         return errorResponse(c, 400, "INVALID_CURSOR", "Cursor does not match sort order");
       }
 
-      const cursorValue = new Date(String(decoded.lastValue));
+      const cursorValue = sql.param(
+        new Date(String(decoded.lastValue)),
+        marketPriceHistory.recordedAt
+      );
       conditions.push(
-        sql`(${marketPriceHistory.recordedAt} < ${cursorValue} OR (${marketPriceHistory.recordedAt} = ${cursorValue} AND ${marketPriceHistory.id} < ${decoded.lastId}))`
+        sql`(${marketPriceHistory.recordedAt} < ${cursorValue} OR (${marketPriceHistory.recordedAt} = ${cursorValue} AND ${marketPriceHistory.id} < ${sql.param(decoded.lastId, marketPriceHistory.id)}))`
       );
     }
 
@@ -1200,7 +1205,10 @@ app.get("/api/markets/:id/trend", async (c) => {
 
     const { windowHours } = parsed.data;
     const windowMs = windowHours * 60 * 60 * 1000;
-    const cutoff = new Date(Date.now() - windowMs);
+    const cutoff = sql.param(
+      new Date(Date.now() - windowMs),
+      marketPriceHistory.recordedAt
+    );
 
     const latest = await db
       .select()

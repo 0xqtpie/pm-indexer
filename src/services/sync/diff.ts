@@ -8,9 +8,17 @@ export interface MarketPriceUpdate {
   volume: number;
   volume24h: number;
   status: Market["status"];
+  prevYesPrice: number;
+  prevNoPrice: number;
+  prevVolume: number;
+  prevVolume24h: number;
+  prevStatus: Market["status"];
 }
 
-export type ExistingMarket = Pick<Market, "id" | "sourceId" | "contentHash">;
+export type ExistingMarket = Pick<
+  Market,
+  "id" | "sourceId" | "contentHash" | "yesPrice" | "noPrice" | "volume" | "volume24h" | "status"
+>;
 
 export interface CategorizedMarkets {
   marketsToInsert: NormalizedMarket[];
@@ -47,15 +55,29 @@ export function categorizeMarkets(
       market.id = existing.id;
     }
 
-    marketsToUpdatePrices.push({
-      id: existing.id,
-      yesPrice: market.yesPrice,
-      noPrice: market.noPrice,
-      volume: market.volume,
-      volume24h: market.volume24h,
-      status: market.status,
-    });
-    updatedPrices++;
+    const priceChanged =
+      market.yesPrice !== existing.yesPrice ||
+      market.noPrice !== existing.noPrice ||
+      market.volume !== existing.volume ||
+      market.volume24h !== existing.volume24h ||
+      market.status !== existing.status;
+
+    if (priceChanged) {
+      marketsToUpdatePrices.push({
+        id: existing.id,
+        yesPrice: market.yesPrice,
+        noPrice: market.noPrice,
+        volume: market.volume,
+        volume24h: market.volume24h,
+        status: market.status,
+        prevYesPrice: existing.yesPrice,
+        prevNoPrice: existing.noPrice,
+        prevVolume: existing.volume,
+        prevVolume24h: existing.volume24h,
+        prevStatus: existing.status,
+      });
+      updatedPrices++;
+    }
 
     if (existing.contentHash !== market.contentHash) {
       // Preserve ID for updates and re-embedding.

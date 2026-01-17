@@ -31,15 +31,15 @@ function shouldIncludeMarket(
   }
 }
 
-async function fetchKalshiMarketsByStatus(
+async function* fetchKalshiMarketBatchesByStatus(
   status: Exclude<KalshiFetchStatus, "all">,
   limit: number,
   excludeSports: boolean
-): Promise<KalshiMarket[]> {
-  const allMarkets: KalshiMarket[] = [];
+): AsyncGenerator<KalshiMarket[], void, void> {
   let cursor: string | undefined;
+  let fetched = 0;
 
-  while (allMarkets.length < limit) {
+  while (fetched < limit) {
     const searchParams: Record<string, string | number | boolean> = {
       status,
       limit: PAGE_SIZE,
@@ -73,6 +73,8 @@ async function fetchKalshiMarketsByStatus(
 
     if (events.length === 0) break;
 
+    const batch: KalshiMarket[] = [];
+
     for (const event of events) {
       if (excludeSports && SPORTS_CATEGORIES.includes(event.category)) {
         continue;
@@ -86,18 +88,40 @@ async function fetchKalshiMarketsByStatus(
       const filteredMarkets = markets.filter((m) =>
         shouldIncludeMarket(m, status)
       );
-      allMarkets.push(...filteredMarkets);
+      for (const market of filteredMarkets) {
+        if (fetched + batch.length >= limit) break;
+        batch.push(market);
+      }
 
-      if (allMarkets.length >= limit) break;
+      if (fetched + batch.length >= limit) break;
     }
 
     cursor = response.cursor;
+
+    if (batch.length > 0) {
+      fetched += batch.length;
+      yield batch;
+    }
 
     if (!cursor) break;
 
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+}
 
+async function fetchKalshiMarketsByStatus(
+  status: Exclude<KalshiFetchStatus, "all">,
+  limit: number,
+  excludeSports: boolean
+): Promise<KalshiMarket[]> {
+  const allMarkets: KalshiMarket[] = [];
+  for await (const batch of fetchKalshiMarketBatchesByStatus(
+    status,
+    limit,
+    excludeSports
+  )) {
+    allMarkets.push(...batch);
+  }
   return allMarkets.slice(0, limit);
 }
 
@@ -134,6 +158,35 @@ export async function fetchKalshiMarkets(
   }
 
   return allMarkets.slice(0, limit);
+}
+
+export async function* streamKalshiMarkets(
+  options: {
+    limit?: number;
+    excludeSports?: boolean;
+    status?: KalshiFetchStatus;
+  } = {}
+): AsyncGenerator<KalshiMarket[], void, void> {
+  const { limit = 500, excludeSports = true, status = "open" } = options;
+
+  const statuses: Array<Exclude<KalshiFetchStatus, "all">> =
+    status === "all" ? ["open", "closed", "settled"] : [status];
+
+  let remaining = limit;
+
+  for (const nextStatus of statuses) {
+    if (remaining <= 0) break;
+    for await (const batch of fetchKalshiMarketBatchesByStatus(
+      nextStatus,
+      remaining,
+      excludeSports
+    )) {
+      if (batch.length === 0) continue;
+      remaining -= batch.length;
+      yield batch;
+      if (remaining <= 0) break;
+    }
+  }
 }
 
 export async function fetchKalshiMarket(

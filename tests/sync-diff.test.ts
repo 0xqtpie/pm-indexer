@@ -138,6 +138,7 @@ describe("categorizeMarkets", () => {
           id: "existing-id",
           sourceId: "market-1",
           contentHash: "hash",
+          yesPrice: 0.4,
         }),
       ],
     ]);
@@ -157,6 +158,7 @@ describe("categorizeMarkets", () => {
     expect(result.contentChanged).toBe(0);
     expect(result.marketsNeedingEmbeddings).toHaveLength(0);
     expect(result.marketsToUpdatePrices[0]?.yesPrice).toBeCloseTo(0.8);
+    expect(result.marketsToUpdatePrices[0]?.prevYesPrice).toBeCloseTo(0.4);
   });
 
   test("marks content changes for re-embedding", () => {
@@ -184,5 +186,41 @@ describe("categorizeMarkets", () => {
     expect(result.contentChanged).toBe(1);
     expect(result.marketsNeedingEmbeddings).toHaveLength(1);
     expect(result.marketsNeedingEmbeddings[0]?.id).toBe("existing-id");
+  });
+
+  test("skips updates when price and status are unchanged", () => {
+    const existingBySourceId = new Map<string, Market>([
+      [
+        "market-1",
+        buildExistingMarket({
+          id: "existing-id",
+          sourceId: "market-1",
+          contentHash: "hash",
+          yesPrice: 0.6,
+          noPrice: 0.4,
+          volume: 12,
+          volume24h: 3,
+          status: "open",
+        }),
+      ],
+    ]);
+
+    const normalizedMarkets = [
+      buildNormalizedMarket({
+        id: "incoming-id",
+        sourceId: "market-1",
+        contentHash: "hash",
+        yesPrice: 0.6,
+        noPrice: 0.4,
+        volume: 12,
+        volume24h: 3,
+        status: "open",
+      }),
+    ];
+
+    const result = categorizeMarkets(normalizedMarkets, existingBySourceId);
+
+    expect(result.updatedPrices).toBe(0);
+    expect(result.marketsToUpdatePrices).toHaveLength(0);
   });
 });

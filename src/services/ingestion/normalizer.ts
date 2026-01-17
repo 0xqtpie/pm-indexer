@@ -32,8 +32,8 @@ function parsePolymarketPrice(prices?: string[] | string): { yes: number; no: nu
 }
 
 function parsePolymarketStatus(market: PolymarketMarket): MarketStatus {
-  if (market.closed) return "closed";
   if (market.archived) return "settled";
+  if (market.closed) return "closed";
   return "open";
 }
 

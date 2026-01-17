@@ -10,21 +10,34 @@ const qdrant = new QdrantClient({
   url: config.QDRANT_URL,
 });
 
-export async function ensureCollection(): Promise<void> {
-  const collections = await qdrant.getCollections();
-  const exists = collections.collections.some(
-    (c) => c.name === COLLECTION_NAME
-  );
+let collectionReady = false;
+let ensurePromise: Promise<void> | null = null;
 
-  if (!exists) {
-    await qdrant.createCollection(COLLECTION_NAME, {
-      vectors: {
-        size: EMBEDDING_DIMENSIONS,
-        distance: "Cosine",
-      },
-    });
-    logger.info("Created collection", { collection: COLLECTION_NAME });
-  }
+export async function ensureCollection(): Promise<void> {
+  if (collectionReady) return;
+  if (ensurePromise) return ensurePromise;
+
+  ensurePromise = (async () => {
+    const collections = await qdrant.getCollections();
+    const exists = collections.collections.some(
+      (c) => c.name === COLLECTION_NAME
+    );
+
+    if (!exists) {
+      await qdrant.createCollection(COLLECTION_NAME, {
+        vectors: {
+          size: EMBEDDING_DIMENSIONS,
+          distance: "Cosine",
+        },
+      });
+      logger.info("Created collection", { collection: COLLECTION_NAME });
+    }
+
+    collectionReady = true;
+    ensurePromise = null;
+  })();
+
+  return ensurePromise;
 }
 
 function buildMarketPayload(market: NormalizedMarket) {
@@ -121,6 +134,7 @@ export async function search(
   limit: number = 20,
   offset: number = 0
 ): Promise<SearchResult[]> {
+  await ensureCollection();
   const must: Array<Record<string, unknown>> = [];
 
   if (filters.source) {
@@ -139,6 +153,54 @@ export async function search(
     vector: queryEmbedding,
     limit,
     offset,
+    filter: must.length > 0 ? { must } : undefined,
+    with_payload: true,
+  });
+
+  return results.map((r) => ({
+    id: r.id as string,
+    score: r.score,
+    source: r.payload?.source as string,
+    sourceId: r.payload?.sourceId as string,
+    title: r.payload?.title as string,
+    subtitle: (r.payload?.subtitle as string) ?? null,
+    description: r.payload?.description as string,
+    status: r.payload?.status as string,
+    yesPrice: r.payload?.yesPrice as number,
+    noPrice: r.payload?.noPrice as number,
+    volume: r.payload?.volume as number,
+    closeAt: (r.payload?.closeAt as string) ?? null,
+    url: r.payload?.url as string,
+    tags: (r.payload?.tags as string[]) ?? [],
+    category: (r.payload?.category as string) ?? null,
+  }));
+}
+
+export async function recommendMarkets(
+  positiveIds: string[],
+  filters: SearchFilters = {},
+  limit: number = 10
+): Promise<SearchResult[]> {
+  if (positiveIds.length === 0) return [];
+
+  await ensureCollection();
+  const must: Array<Record<string, unknown>> = [];
+
+  if (filters.source) {
+    must.push({ key: "source", match: { value: filters.source } });
+  }
+
+  if (filters.status) {
+    must.push({ key: "status", match: { value: filters.status } });
+  }
+
+  if (filters.minVolume !== undefined) {
+    must.push({ key: "volume", range: { gte: filters.minVolume } });
+  }
+
+  const results = await qdrant.recommend(COLLECTION_NAME, {
+    positive: positiveIds,
+    limit,
     filter: must.length > 0 ? { must } : undefined,
     with_payload: true,
   });

@@ -97,6 +97,16 @@ describe("normalizePolymarketMarket", () => {
     expect(normalized.yesPrice).toBeCloseTo(0.7);
     expect(normalized.noPrice).toBeCloseTo(0.3);
   });
+
+  test("treats archived markets as settled even if closed", async () => {
+    const market = buildPolymarketMarket({
+      closed: true,
+      archived: true,
+    });
+    const normalized = await normalizePolymarketMarket(market);
+
+    expect(normalized.status).toBe("settled");
+  });
 });
 
 describe("normalizeKalshiMarket", () => {

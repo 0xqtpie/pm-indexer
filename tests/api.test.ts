@@ -18,12 +18,14 @@ describe("API Routes", () => {
     expect(res.status).toBe(400);
 
     const json = await res.json();
-    expect(json.error).toBe("Invalid query parameters");
+    expect(json.error.code).toBe("INVALID_REQUEST");
   });
 
   test("GET /api/markets/:id returns 404 for non-existent market", async () => {
     const res = await app.request("/api/markets/00000000-0000-0000-0000-000000000000");
     expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error.code).toBe("NOT_FOUND");
   });
 
   test("GET /api/markets returns list", async () => {

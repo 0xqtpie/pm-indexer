@@ -13,9 +13,11 @@ export type ExternalApiErrorCategory =
 type SyncMetrics = {
   runs: number;
   failures: number;
+  partials: number;
   lastDurationMs: number | null;
   lastError: string | null;
   lastRunAt: string | null;
+  lastStatus: "success" | "partial" | "failed" | null;
 };
 
 type ExternalApiMetrics = {
@@ -28,16 +30,20 @@ const syncMetrics: Record<SyncType, SyncMetrics> = {
   incremental: {
     runs: 0,
     failures: 0,
+    partials: 0,
     lastDurationMs: null,
     lastError: null,
     lastRunAt: null,
+    lastStatus: null,
   },
   full: {
     runs: 0,
     failures: 0,
+    partials: 0,
     lastDurationMs: null,
     lastError: null,
     lastRunAt: null,
+    lastStatus: null,
   },
 };
 
@@ -74,13 +80,30 @@ export function recordSyncSuccess(type: SyncType, durationMs: number) {
   entry.lastDurationMs = durationMs;
   entry.lastRunAt = new Date().toISOString();
   entry.lastError = null;
+  entry.lastStatus = "success";
+}
+
+export function recordSyncPartial(
+  type: SyncType,
+  error: string,
+  durationMs?: number
+) {
+  const entry = syncMetrics[type];
+  entry.runs += 1;
+  entry.partials += 1;
+  entry.lastError = error;
+  entry.lastRunAt = new Date().toISOString();
+  entry.lastDurationMs = durationMs ?? entry.lastDurationMs;
+  entry.lastStatus = "partial";
 }
 
 export function recordSyncFailure(type: SyncType, error: string) {
   const entry = syncMetrics[type];
+  entry.runs += 1;
   entry.failures += 1;
   entry.lastError = error;
   entry.lastRunAt = new Date().toISOString();
+  entry.lastStatus = "failed";
 }
 
 export function recordExternalApiError(

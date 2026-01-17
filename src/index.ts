@@ -2,6 +2,8 @@ import app from "./api/routes.ts";
 import { config } from "./config.ts";
 import { startScheduler } from "./services/scheduler/index.ts";
 import { logger } from "./logger.ts";
+import { ensureCollection } from "./services/search/qdrant.ts";
+import { startJobWorker } from "./services/jobs/worker.ts";
 
 const port = config.PORT;
 
@@ -14,6 +16,14 @@ logger.info("Starting prediction market indexer", {
 
 // Start the background sync scheduler
 startScheduler();
+startJobWorker();
+
+// Warm up Qdrant collection to avoid cold-start errors
+ensureCollection().catch((error) => {
+  logger.warn("Failed to ensure Qdrant collection", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+});
 
 export default {
   port,

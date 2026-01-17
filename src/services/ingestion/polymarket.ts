@@ -61,15 +61,15 @@ function shouldIncludeMarket(
   }
 }
 
-async function fetchPolymarketMarketsByStatus(
+async function* fetchPolymarketMarketBatchesByStatus(
   status: Exclude<PolymarketFetchStatus, "all">,
   limit: number,
   excludeSports: boolean
-): Promise<PolymarketMarket[]> {
-  const allMarkets: PolymarketMarket[] = [];
+): AsyncGenerator<PolymarketMarket[], void, void> {
   let offset = 0;
+  let fetched = 0;
 
-  while (allMarkets.length < limit) {
+  while (fetched < limit) {
     const searchParams: Record<string, string | number | boolean> = {
       limit: PAGE_SIZE,
       offset,
@@ -106,6 +106,8 @@ async function fetchPolymarketMarketsByStatus(
 
     if (events.length === 0) break;
 
+    const batch: PolymarketMarket[] = [];
+
     // Extract markets from events, inheriting tags from parent event
     for (const event of events) {
       const markets = (event.markets ?? []).map((m) => ({
@@ -118,17 +120,39 @@ async function fetchPolymarketMarketsByStatus(
         shouldIncludeMarket(m, status, excludeSports)
       );
 
-      allMarkets.push(...filteredMarkets);
+      for (const market of filteredMarkets) {
+        if (fetched + batch.length >= limit) break;
+        batch.push(market);
+      }
 
-      if (allMarkets.length >= limit) break;
+      if (fetched + batch.length >= limit) break;
     }
 
     offset += PAGE_SIZE;
 
+    if (batch.length > 0) {
+      fetched += batch.length;
+      yield batch;
+    }
+
     // Small delay to respect rate limits
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+}
 
+async function fetchPolymarketMarketsByStatus(
+  status: Exclude<PolymarketFetchStatus, "all">,
+  limit: number,
+  excludeSports: boolean
+): Promise<PolymarketMarket[]> {
+  const allMarkets: PolymarketMarket[] = [];
+  for await (const batch of fetchPolymarketMarketBatchesByStatus(
+    status,
+    limit,
+    excludeSports
+  )) {
+    allMarkets.push(...batch);
+  }
   return allMarkets.slice(0, limit);
 }
 
@@ -165,6 +189,35 @@ export async function fetchPolymarketMarkets(
   }
 
   return allMarkets.slice(0, limit);
+}
+
+export async function* streamPolymarketMarkets(
+  options: {
+    limit?: number;
+    excludeSports?: boolean;
+    status?: PolymarketFetchStatus;
+  } = {}
+): AsyncGenerator<PolymarketMarket[], void, void> {
+  const { limit = 500, excludeSports = true, status = "open" } = options;
+
+  const statuses: Array<Exclude<PolymarketFetchStatus, "all">> =
+    status === "all" ? ["open", "closed", "settled"] : [status];
+
+  let remaining = limit;
+
+  for (const nextStatus of statuses) {
+    if (remaining <= 0) break;
+    for await (const batch of fetchPolymarketMarketBatchesByStatus(
+      nextStatus,
+      remaining,
+      excludeSports
+    )) {
+      if (batch.length === 0) continue;
+      remaining -= batch.length;
+      yield batch;
+      if (remaining <= 0) break;
+    }
+  }
 }
 
 export async function fetchPolymarketMarket(

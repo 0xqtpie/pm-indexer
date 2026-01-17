@@ -45,7 +45,7 @@ export function startScheduler(): void {
   // Check every minute if it's time for full sync
   fullSyncCheckIntervalId = setInterval(async () => {
     const now = new Date();
-    const { lastFullSyncTime, isSyncing } = getSyncStatus();
+    const { lastFullSyncTime, isSyncing } = await getSyncStatus();
 
     // Check if it's the right hour and we haven't done a full sync today
     if (now.getHours() === config.FULL_SYNC_HOUR && !isSyncing) {
@@ -107,7 +107,7 @@ export function isSchedulerRunning(): boolean {
  * Run an incremental sync with error handling.
  */
 async function runIncrementalSync(): Promise<void> {
-  const { isSyncing } = getSyncStatus();
+  const { isSyncing } = await getSyncStatus();
 
   if (isSyncing) {
     logger.info("Skipping incremental sync - sync already in progress");
@@ -121,7 +121,7 @@ async function runIncrementalSync(): Promise<void> {
  * Run a full sync with error handling.
  */
 async function runFullSync(): Promise<void> {
-  const { isSyncing } = getSyncStatus();
+  const { isSyncing } = await getSyncStatus();
 
   if (isSyncing) {
     logger.info("Skipping full sync - sync already in progress");

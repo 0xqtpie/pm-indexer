@@ -128,4 +128,46 @@ describe("job worker retries", () => {
       await db.delete(markets).where(eq(markets.id, marketId));
     }
   });
+
+  test("marks jobs succeeded on successful embed", async () => {
+    const { db, jobs, markets } = await import("../src/db/index.ts");
+    const { runJobWorkerOnce } = await import("../src/services/jobs/worker.ts");
+
+    const marketId = crypto.randomUUID();
+    const jobId = crypto.randomUUID();
+
+    await seedMarket(marketId);
+
+    await db.insert(jobs).values({
+      id: jobId,
+      type: "embed_market",
+      payload: { marketIds: [marketId] },
+      maxAttempts: 3,
+      runAt: new Date(),
+    });
+
+    failOpenai = false;
+    failQdrant = false;
+
+    try {
+      const processed = await runJobWorkerOnce("worker-success");
+      expect(processed).toBe(1);
+
+      const [jobRow] = await db
+        .select()
+        .from(jobs)
+        .where(eq(jobs.id, jobId));
+
+      expect(jobRow?.status).toBe("succeeded");
+
+      const [marketRow] = await db
+        .select()
+        .from(markets)
+        .where(eq(markets.id, marketId));
+      expect(marketRow?.embeddingModel).toBe("test-embedding-model");
+    } finally {
+      await db.delete(jobs).where(eq(jobs.id, jobId));
+      await db.delete(markets).where(eq(markets.id, marketId));
+    }
+  });
 });

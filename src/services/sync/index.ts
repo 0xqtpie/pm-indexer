@@ -35,6 +35,15 @@ import {
 } from "../../metrics.ts";
 import { enqueueEmbeddingJob } from "../jobs/index.ts";
 
+function buildUuidInCondition(
+  column: typeof alerts.marketId,
+  ids: string[]
+) {
+  if (ids.length === 0) return undefined;
+  const values = ids.map((id) => sql`${id}::uuid`);
+  return sql`${column} IN (${sql.join(values, sql`, `)})`;
+}
+
 export interface SyncResult {
   source: MarketSource;
   fetched: number;
@@ -660,22 +669,22 @@ async function updateMarketPricesBatch(
     const batch = updates.slice(i, i + BATCH_SIZE);
     const values = batch.map(
       (update) =>
-        sql`(${update.id}, ${update.yesPrice}, ${update.noPrice}, ${update.volume}, ${update.volume24h}, ${update.status}, ${syncedAt})`
+        sql`(${sql.param(update.id, markets.id)}, ${sql.param(update.yesPrice, markets.yesPrice)}, ${sql.param(update.noPrice, markets.noPrice)}, ${sql.param(update.volume, markets.volume)}, ${sql.param(update.volume24h, markets.volume24h)}, ${sql.param(update.status, markets.status)}, ${sql.param(syncedAt, markets.lastSyncedAt)})`
     );
 
-    await db.execute(sql`
-      UPDATE ${markets} AS m
-      SET
-        yes_price = v.yes_price,
-        no_price = v.no_price,
-        volume = v.volume,
-        volume_24h = v.volume_24h,
-        status = v.status::market_status,
-        last_synced_at = v.last_synced_at
-      FROM (VALUES ${sql.join(values, sql`, `)})
-        AS v(id, yes_price, no_price, volume, volume_24h, status, last_synced_at)
-      WHERE m.id = v.id
-    `);
+      await db.execute(sql`
+        UPDATE ${markets} AS m
+        SET
+          yes_price = v.yes_price::real,
+          no_price = v.no_price::real,
+          volume = v.volume::real,
+          volume_24h = v.volume_24h::real,
+          status = v.status::market_status,
+          last_synced_at = v.last_synced_at::timestamp
+        FROM (VALUES ${sql.join(values, sql`, `)})
+          AS v(id, yes_price, no_price, volume, volume_24h, status, last_synced_at)
+        WHERE m.id = v.id::uuid
+      `);
   }
 }
 
@@ -688,7 +697,7 @@ async function updateMarketContentBatch(
     const batch = updates.slice(i, i + BATCH_SIZE);
     const values = batch.map(
       (market) =>
-        sql`(${market.id}, ${market.title}, ${market.subtitle}, ${market.description}, ${market.rules}, ${market.category}, ${market.tags}, ${market.closeAt}, ${market.url}, ${market.imageUrl}, ${market.contentHash}, ${EMBEDDING_MODEL}, ${syncedAt})`
+        sql`(${sql.param(market.id, markets.id)}, ${sql.param(market.title, markets.title)}, ${sql.param(market.subtitle, markets.subtitle)}, ${sql.param(market.description, markets.description)}, ${sql.param(market.rules, markets.rules)}, ${sql.param(market.category, markets.category)}, ${sql.param(market.tags, markets.tags)}, ${sql.param(market.closeAt, markets.closeAt)}, ${sql.param(market.url, markets.url)}, ${sql.param(market.imageUrl, markets.imageUrl)}, ${sql.param(market.contentHash, markets.contentHash)}, ${sql.param(EMBEDDING_MODEL, markets.embeddingModel)}, ${sql.param(syncedAt, markets.lastSyncedAt)})`
     );
 
     await db.execute(sql`
@@ -708,7 +717,7 @@ async function updateMarketContentBatch(
         last_synced_at = v.last_synced_at
       FROM (VALUES ${sql.join(values, sql`, `)})
         AS v(id, title, subtitle, description, rules, category, tags, close_at, url, image_url, content_hash, embedding_model, last_synced_at)
-      WHERE m.id = v.id
+      WHERE m.id = v.id::uuid
     `);
   }
 }
@@ -774,15 +783,17 @@ async function evaluateAlerts(
   );
 
   if (priceUpdates.length > 0) {
+    const marketIds = priceUpdates.map((update) => update.id);
+    const marketCondition = buildUuidInCondition(alerts.marketId, marketIds);
+    if (!marketCondition) {
+      return;
+    }
     const priceAlerts = await db
       .select()
       .from(alerts)
       .where(
         and(
-          inArray(
-            alerts.marketId,
-            priceUpdates.map((update) => update.id)
-          ),
+          marketCondition,
           eq(alerts.type, "price_move"),
           eq(alerts.enabled, true)
         )
@@ -819,15 +830,17 @@ async function evaluateAlerts(
   }
 
   if (normalizedMarkets.length > 0) {
+    const marketIds = normalizedMarkets.map((market) => market.id);
+    const marketCondition = buildUuidInCondition(alerts.marketId, marketIds);
+    if (!marketCondition) {
+      return;
+    }
     const closingAlerts = await db
       .select()
       .from(alerts)
       .where(
         and(
-          inArray(
-            alerts.marketId,
-            normalizedMarkets.map((market) => market.id)
-          ),
+          marketCondition,
           eq(alerts.type, "closing_soon"),
           eq(alerts.enabled, true)
         )
@@ -875,10 +888,16 @@ async function evaluateAlerts(
       );
     }
 
-    await db
-      .update(alerts)
-      .set({ lastTriggeredAt: now })
-      .where(inArray(alerts.id, Array.from(alertIdsToUpdate)));
+    const alertIdCondition = buildUuidInCondition(
+      alerts.id,
+      Array.from(alertIdsToUpdate)
+    );
+    if (alertIdCondition) {
+      await db
+        .update(alerts)
+        .set({ lastTriggeredAt: now })
+        .where(alertIdCondition);
+    }
   }
 }
 

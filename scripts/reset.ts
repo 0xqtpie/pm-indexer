@@ -1,13 +1,31 @@
-import { db, markets } from "../src/db/index.ts";
-import { sql } from "drizzle-orm";
+import {
+  db,
+  markets,
+  marketPriceHistory,
+  watchlists,
+  watchlistItems,
+  alerts,
+  alertEvents,
+  syncRuns,
+  jobs,
+  adminAuditLogs,
+} from "../src/db/index.ts";
 import { qdrant, COLLECTION_NAME } from "../src/services/search/qdrant.ts";
 
 async function main() {
   console.log("🗑️  Resetting database...\n");
 
-  // Step 1: Clear Postgres
-  console.log("📦 Clearing Postgres markets table...");
-  const deleted = await db.delete(markets);
+  // Step 1: Clear Postgres tables
+  console.log("📦 Clearing Postgres tables...");
+  await db.delete(alertEvents);
+  await db.delete(alerts);
+  await db.delete(watchlistItems);
+  await db.delete(watchlists);
+  await db.delete(marketPriceHistory);
+  await db.delete(jobs);
+  await db.delete(adminAuditLogs);
+  await db.delete(syncRuns);
+  await db.delete(markets);
   console.log("   Done");
 
   // Step 2: Delete Qdrant collection

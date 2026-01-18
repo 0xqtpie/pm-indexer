@@ -530,6 +530,11 @@ Test the ingestion manually:
 bun run scripts/test-ingestion.ts
 ```
 
+Notes:
+- Some tests hit Postgres and expect a working `DATABASE_URL`.
+- `tests/search.test.ts` and `tests/qdrant-init.test.ts` require Qdrant (and seeded vectors for the search suite).
+- Opt-in live integrations are in `tests/live-integration.test.ts` and run with `RUN_LIVE_TESTS=true` (requires OpenAI + Qdrant + network access).
+
 ### Database Management
 
 View database contents:
@@ -563,6 +568,7 @@ Qdrant dashboard: http://localhost:6333/dashboard
 - **Admin auth:** set `ADMIN_API_KEY` and send `x-admin-key` or `Authorization: Bearer` for `/api/admin/*` and `/metrics`.
 - **Admin CSRF:** if `ADMIN_CSRF_TOKEN` is set, send `x-csrf-token` for POST/PUT/PATCH/DELETE admin calls.
 - **Job worker:** when `JOB_WORKER_ENABLED=true`, embedding work is enqueued and processed by the worker loop.
+- **Job queue activation:** ensure migrations are applied and a process with `JOB_WORKER_ENABLED=true` is running to execute queued jobs.
 - **Monitoring:** use `/metrics` and `/api/admin/sync/status` to track sync health.
 
 ## Tech Stack

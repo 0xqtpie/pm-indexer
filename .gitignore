@@ -41,3 +41,9 @@ drizzle/
 
 # Local prompts
 prompts/
+
+# Claude Code working directories
+.claude/
+.tldr/
+.tldrignore
+thoughts/

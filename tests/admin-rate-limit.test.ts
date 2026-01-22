@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 
 describe("admin rate limiting", () => {
   test("returns 429 after exceeding admin burst limit", async () => {
-    const { default: app } = await import("../src/api/routes.ts");
+    const { default: app } = await import("../src/api/index.ts");
     const { config } = await import("../src/config.ts");
 
     config.ADMIN_API_KEY = "admin-rate-key";

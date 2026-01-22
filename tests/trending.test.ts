@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { inArray } from "drizzle-orm";
-import app from "../src/api/routes.ts";
+import app from "../src/api/index.ts";
 import { db, markets } from "../src/db/index.ts";
 
 describe("trending endpoints", () => {
@@ -15,6 +15,8 @@ describe("trending endpoints", () => {
     const marketIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
     const now = new Date();
 
+    // Use very high volumes to ensure test tags appear in top 200 results
+    // (existing data has tags with volumes up to ~38M, so we use 100M+ to guarantee top placement)
     await db.insert(markets).values([
       {
         id: marketIds[0],
@@ -25,7 +27,7 @@ describe("trending endpoints", () => {
         yesPrice: 0.5,
         noPrice: 0.5,
         volume: 0,
-        volume24h: 1000,
+        volume24h: 100_000_000, // 100M - tagA gets 100M+50M=150M, tagB gets 100M
         status: "open",
         createdAt: now,
         url: "https://example.com/trend-a",
@@ -42,7 +44,7 @@ describe("trending endpoints", () => {
         yesPrice: 0.5,
         noPrice: 0.5,
         volume: 0,
-        volume24h: 500,
+        volume24h: 50_000_000, // 50M - tagA gets +50M
         status: "open",
         createdAt: now,
         url: "https://example.com/trend-b",
@@ -59,7 +61,7 @@ describe("trending endpoints", () => {
         yesPrice: 0.5,
         noPrice: 0.5,
         volume: 0,
-        volume24h: 2000,
+        volume24h: 200_000_000, // 200M - tagC gets 200M
         status: "open",
         createdAt: now,
         url: "https://example.com/trend-c",
@@ -79,9 +81,9 @@ describe("trending endpoints", () => {
         tagVolumes[row.tag] = row.volume_24h;
       }
 
-      expect(tagVolumes[tagA]).toBeCloseTo(1500);
-      expect(tagVolumes[tagB]).toBeCloseTo(1000);
-      expect(tagVolumes[tagC]).toBeCloseTo(2000);
+      expect(tagVolumes[tagA]).toBeCloseTo(150_000_000); // 100M + 50M
+      expect(tagVolumes[tagB]).toBeCloseTo(100_000_000); // 100M
+      expect(tagVolumes[tagC]).toBeCloseTo(200_000_000); // 200M
 
       const categoriesRes = await app.request("/api/categories/trending?limit=200");
       expect(categoriesRes.status).toBe(200);
@@ -92,8 +94,8 @@ describe("trending endpoints", () => {
         categoryVolumes[row.category] = row.volume_24h;
       }
 
-      expect(categoryVolumes[catA]).toBeCloseTo(3000);
-      expect(categoryVolumes[catB]).toBeCloseTo(500);
+      expect(categoryVolumes[catA]).toBeCloseTo(300_000_000); // 100M + 200M
+      expect(categoryVolumes[catB]).toBeCloseTo(50_000_000); // 50M
     } finally {
       await db.delete(markets).where(inArray(markets.id, marketIds));
     }

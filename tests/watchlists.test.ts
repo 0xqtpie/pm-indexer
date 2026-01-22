@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { eq } from "drizzle-orm";
-import app from "../src/api/routes.ts";
+import app from "../src/api/index.ts";
 import {
   db,
   markets,

@@ -3,6 +3,7 @@ import { config } from "../../config.ts";
 import type { NormalizedMarket } from "../../types/market.ts";
 import { EMBEDDING_DIMENSIONS } from "../embedding/openai.ts";
 import { logger } from "../../logger.ts";
+import { withRetry } from "./qdrant-retry.ts";
 
 const COLLECTION_NAME = "markets";
 
@@ -18,20 +19,22 @@ export async function ensureCollection(): Promise<void> {
   if (ensurePromise) return ensurePromise;
 
   ensurePromise = (async () => {
-    const collections = await qdrant.getCollections();
-    const exists = collections.collections.some(
-      (c) => c.name === COLLECTION_NAME
-    );
+    await withRetry(async () => {
+      const collections = await qdrant.getCollections();
+      const exists = collections.collections.some(
+        (c) => c.name === COLLECTION_NAME
+      );
 
-    if (!exists) {
-      await qdrant.createCollection(COLLECTION_NAME, {
-        vectors: {
-          size: EMBEDDING_DIMENSIONS,
-          distance: "Cosine",
-        },
-      });
-      logger.info("Created collection", { collection: COLLECTION_NAME });
-    }
+      if (!exists) {
+        await qdrant.createCollection(COLLECTION_NAME, {
+          vectors: {
+            size: EMBEDDING_DIMENSIONS,
+            distance: "Cosine",
+          },
+        });
+        logger.info("Created collection", { collection: COLLECTION_NAME });
+      }
+    });
 
     collectionReady = true;
     ensurePromise = null;
@@ -75,10 +78,12 @@ export async function upsertMarkets(
   const BATCH_SIZE = 100;
   for (let i = 0; i < points.length; i += BATCH_SIZE) {
     const batch = points.slice(i, i + BATCH_SIZE);
-    await qdrant.upsert(COLLECTION_NAME, {
-      wait: true,
-      points: batch,
-    });
+    await withRetry(() =>
+      qdrant.upsert(COLLECTION_NAME, {
+        wait: true,
+        points: batch,
+      })
+    );
   }
 }
 
@@ -97,10 +102,12 @@ export async function updateMarketPayloads(
   const BATCH_SIZE = 100;
   for (let i = 0; i < operations.length; i += BATCH_SIZE) {
     const batch = operations.slice(i, i + BATCH_SIZE);
-    await qdrant.batchUpdate(COLLECTION_NAME, {
-      wait: true,
-      operations: batch,
-    });
+    await withRetry(() =>
+      qdrant.batchUpdate(COLLECTION_NAME, {
+        wait: true,
+        operations: batch,
+      })
+    );
   }
 }
 
@@ -149,31 +156,33 @@ export async function search(
     must.push({ key: "volume", range: { gte: filters.minVolume } });
   }
 
-  const results = await qdrant.search(COLLECTION_NAME, {
-    vector: queryEmbedding,
-    limit,
-    offset,
-    filter: must.length > 0 ? { must } : undefined,
-    with_payload: true,
-  });
+  return withRetry(async () => {
+    const results = await qdrant.search(COLLECTION_NAME, {
+      vector: queryEmbedding,
+      limit,
+      offset,
+      filter: must.length > 0 ? { must } : undefined,
+      with_payload: true,
+    });
 
-  return results.map((r) => ({
-    id: r.id as string,
-    score: r.score,
-    source: r.payload?.source as string,
-    sourceId: r.payload?.sourceId as string,
-    title: r.payload?.title as string,
-    subtitle: (r.payload?.subtitle as string) ?? null,
-    description: r.payload?.description as string,
-    status: r.payload?.status as string,
-    yesPrice: r.payload?.yesPrice as number,
-    noPrice: r.payload?.noPrice as number,
-    volume: r.payload?.volume as number,
-    closeAt: (r.payload?.closeAt as string) ?? null,
-    url: r.payload?.url as string,
-    tags: (r.payload?.tags as string[]) ?? [],
-    category: (r.payload?.category as string) ?? null,
-  }));
+    return results.map((r) => ({
+      id: r.id as string,
+      score: r.score,
+      source: r.payload?.source as string,
+      sourceId: r.payload?.sourceId as string,
+      title: r.payload?.title as string,
+      subtitle: (r.payload?.subtitle as string) ?? null,
+      description: r.payload?.description as string,
+      status: r.payload?.status as string,
+      yesPrice: r.payload?.yesPrice as number,
+      noPrice: r.payload?.noPrice as number,
+      volume: r.payload?.volume as number,
+      closeAt: (r.payload?.closeAt as string) ?? null,
+      url: r.payload?.url as string,
+      tags: (r.payload?.tags as string[]) ?? [],
+      category: (r.payload?.category as string) ?? null,
+    }));
+  });
 }
 
 export async function recommendMarkets(
@@ -198,43 +207,60 @@ export async function recommendMarkets(
     must.push({ key: "volume", range: { gte: filters.minVolume } });
   }
 
-  const results = await qdrant.recommend(COLLECTION_NAME, {
-    positive: positiveIds,
-    limit,
-    filter: must.length > 0 ? { must } : undefined,
-    with_payload: true,
-  });
+  return withRetry(async () => {
+    const results = await qdrant.recommend(COLLECTION_NAME, {
+      positive: positiveIds,
+      limit,
+      filter: must.length > 0 ? { must } : undefined,
+      with_payload: true,
+    });
 
-  return results.map((r) => ({
-    id: r.id as string,
-    score: r.score,
-    source: r.payload?.source as string,
-    sourceId: r.payload?.sourceId as string,
-    title: r.payload?.title as string,
-    subtitle: (r.payload?.subtitle as string) ?? null,
-    description: r.payload?.description as string,
-    status: r.payload?.status as string,
-    yesPrice: r.payload?.yesPrice as number,
-    noPrice: r.payload?.noPrice as number,
-    volume: r.payload?.volume as number,
-    closeAt: (r.payload?.closeAt as string) ?? null,
-    url: r.payload?.url as string,
-    tags: (r.payload?.tags as string[]) ?? [],
-    category: (r.payload?.category as string) ?? null,
-  }));
+    return results.map((r) => ({
+      id: r.id as string,
+      score: r.score,
+      source: r.payload?.source as string,
+      sourceId: r.payload?.sourceId as string,
+      title: r.payload?.title as string,
+      subtitle: (r.payload?.subtitle as string) ?? null,
+      description: r.payload?.description as string,
+      status: r.payload?.status as string,
+      yesPrice: r.payload?.yesPrice as number,
+      noPrice: r.payload?.noPrice as number,
+      volume: r.payload?.volume as number,
+      closeAt: (r.payload?.closeAt as string) ?? null,
+      url: r.payload?.url as string,
+      tags: (r.payload?.tags as string[]) ?? [],
+      category: (r.payload?.category as string) ?? null,
+    }));
+  });
 }
 
 export async function getCollectionInfo(): Promise<{
   vectorsCount: number;
   pointsCount: number;
 }> {
-  const info = await qdrant.getCollection(COLLECTION_NAME);
-  // points_count is the actual number of vectors stored
-  // indexed_vectors_count may be 0 if below indexing threshold
-  return {
-    vectorsCount: info.points_count ?? 0,
-    pointsCount: info.points_count ?? 0,
-  };
+  return withRetry(async () => {
+    const info = await qdrant.getCollection(COLLECTION_NAME);
+    // points_count is the actual number of vectors stored
+    // indexed_vectors_count may be 0 if below indexing threshold
+    return {
+      vectorsCount: info.points_count ?? 0,
+      pointsCount: info.points_count ?? 0,
+    };
+  });
+}
+
+/**
+ * Check if Qdrant is accessible and responding.
+ * Returns true if healthy, false otherwise.
+ */
+export async function checkQdrantHealth(): Promise<boolean> {
+  try {
+    await qdrant.getCollections();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export { COLLECTION_NAME, qdrant };

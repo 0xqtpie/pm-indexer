@@ -6,7 +6,19 @@ import {
   alerts,
   alertEvents,
 } from "../../db/index.ts";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import type { PgInsertValue, PgTable } from "drizzle-orm/pg-core";
+
+// Database client interface for batch functions
+// This captures the methods needed by both db and transaction objects
+interface DbClient {
+  insert<T extends PgTable>(
+    table: T
+  ): {
+    values(values: PgInsertValue<T> | PgInsertValue<T>[]): Promise<unknown>;
+  };
+  execute<T extends Record<string, unknown>>(query: SQL): Promise<unknown>;
+}
 import { streamPolymarketMarkets } from "../ingestion/polymarket.ts";
 import { streamKalshiMarkets } from "../ingestion/kalshi.ts";
 import {
@@ -562,41 +574,46 @@ async function applyBatchChanges({
     }
   }
 
-  // Step 2: Insert new markets into Postgres
-  if (marketsToInsert.length > 0) {
-    await insertMarketsBatch(marketsToInsert, syncedAt);
-    await recordPriceHistoryFromMarkets(marketsToInsert, syncedAt);
-    logger.info("Inserted new markets", {
-      source,
-      count: marketsToInsert.length,
-    });
-  }
-
-  // Step 3: Update content for changed markets (batched)
+  // Compute content updates before transaction
   const contentUpdates = marketsNeedingEmbeddings.filter((market) =>
     existingBySourceId.has(market.sourceId)
   );
 
-  if (contentUpdates.length > 0) {
-    await updateMarketContentBatch(contentUpdates, syncedAt);
-  }
+  // Wrap all Postgres writes in a transaction for atomicity
+  await db.transaction(async (tx) => {
+    // Step 2: Insert new markets into Postgres
+    if (marketsToInsert.length > 0) {
+      await insertMarketsBatch(marketsToInsert, syncedAt, tx);
+      await recordPriceHistoryFromMarkets(marketsToInsert, syncedAt, tx);
+      logger.info("Inserted new markets", {
+        source,
+        count: marketsToInsert.length,
+      });
+    }
 
-  // Step 4: Upsert vectors to Qdrant after DB writes
+    // Step 3: Update content for changed markets (batched)
+    if (contentUpdates.length > 0) {
+      await updateMarketContentBatch(contentUpdates, syncedAt, tx);
+    }
+
+    // Step 4: Batch update prices for existing markets
+    if (marketsToUpdatePrices.length > 0) {
+      await updateMarketPricesBatch(marketsToUpdatePrices, syncedAt, tx);
+      await recordPriceHistoryFromUpdates(marketsToUpdatePrices, syncedAt, tx);
+      logger.info("Batch updated markets", {
+        source,
+        count: marketsToUpdatePrices.length,
+      });
+    }
+  });
+
+  // Qdrant operations AFTER Postgres transaction commits (external system)
+  // Step 5: Upsert vectors to Qdrant
   if (!useJobQueue && marketsNeedingEmbeddings.length > 0 && embeddings.size > 0) {
     await upsertMarkets(marketsNeedingEmbeddings, embeddings);
     logger.info("Upserted vectors to Qdrant", {
       source,
       vectors: embeddings.size,
-    });
-  }
-
-  // Step 5: Batch update prices for existing markets
-  if (marketsToUpdatePrices.length > 0) {
-    await updateMarketPricesBatch(marketsToUpdatePrices, syncedAt);
-    await recordPriceHistoryFromUpdates(marketsToUpdatePrices, syncedAt);
-    logger.info("Batch updated markets", {
-      source,
-      count: marketsToUpdatePrices.length,
     });
   }
 
@@ -622,7 +639,8 @@ async function applyBatchChanges({
 
 async function insertMarketsBatch(
   marketsToInsert: NormalizedMarket[],
-  syncedAt: Date
+  syncedAt: Date,
+  tx: DbClient = db
 ): Promise<void> {
   const BATCH_SIZE = 100;
   for (let i = 0; i < marketsToInsert.length; i += BATCH_SIZE) {
@@ -656,13 +674,14 @@ async function insertMarketsBatch(
       lastSyncedAt: syncedAt,
     }));
 
-    await db.insert(markets).values(dbRecords);
+    await tx.insert(markets).values(dbRecords);
   }
 }
 
 async function updateMarketPricesBatch(
   updates: MarketPriceUpdate[],
-  syncedAt: Date
+  syncedAt: Date,
+  tx: DbClient = db
 ): Promise<void> {
   const BATCH_SIZE = 1000;
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
@@ -672,25 +691,26 @@ async function updateMarketPricesBatch(
         sql`(${sql.param(update.id, markets.id)}, ${sql.param(update.yesPrice, markets.yesPrice)}, ${sql.param(update.noPrice, markets.noPrice)}, ${sql.param(update.volume, markets.volume)}, ${sql.param(update.volume24h, markets.volume24h)}, ${sql.param(update.status, markets.status)}, ${sql.param(syncedAt, markets.lastSyncedAt)})`
     );
 
-      await db.execute(sql`
-        UPDATE ${markets} AS m
-        SET
-          yes_price = v.yes_price::real,
-          no_price = v.no_price::real,
-          volume = v.volume::real,
-          volume_24h = v.volume_24h::real,
-          status = v.status::market_status,
-          last_synced_at = v.last_synced_at::timestamp
-        FROM (VALUES ${sql.join(values, sql`, `)})
-          AS v(id, yes_price, no_price, volume, volume_24h, status, last_synced_at)
-        WHERE m.id = v.id::uuid
-      `);
+    await tx.execute(sql`
+      UPDATE ${markets} AS m
+      SET
+        yes_price = v.yes_price::real,
+        no_price = v.no_price::real,
+        volume = v.volume::real,
+        volume_24h = v.volume_24h::real,
+        status = v.status::market_status,
+        last_synced_at = v.last_synced_at::timestamp
+      FROM (VALUES ${sql.join(values, sql`, `)})
+        AS v(id, yes_price, no_price, volume, volume_24h, status, last_synced_at)
+      WHERE m.id = v.id::uuid
+    `);
   }
 }
 
 async function updateMarketContentBatch(
   updates: NormalizedMarket[],
-  syncedAt: Date
+  syncedAt: Date,
+  tx: DbClient = db
 ): Promise<void> {
   const BATCH_SIZE = 200;
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
@@ -700,7 +720,7 @@ async function updateMarketContentBatch(
         sql`(${sql.param(market.id, markets.id)}, ${sql.param(market.title, markets.title)}, ${sql.param(market.subtitle, markets.subtitle)}, ${sql.param(market.description, markets.description)}, ${sql.param(market.rules, markets.rules)}, ${sql.param(market.category, markets.category)}, ${sql.param(market.tags, markets.tags)}, ${sql.param(market.closeAt, markets.closeAt)}, ${sql.param(market.url, markets.url)}, ${sql.param(market.imageUrl, markets.imageUrl)}, ${sql.param(market.contentHash, markets.contentHash)}, ${sql.param(EMBEDDING_MODEL, markets.embeddingModel)}, ${sql.param(syncedAt, markets.lastSyncedAt)})`
     );
 
-    await db.execute(sql`
+    await tx.execute(sql`
       UPDATE ${markets} AS m
       SET
         title = v.title,
@@ -724,12 +744,13 @@ async function updateMarketContentBatch(
 
 async function recordPriceHistoryFromMarkets(
   newMarkets: NormalizedMarket[],
-  recordedAt: Date
+  recordedAt: Date,
+  tx: DbClient = db
 ): Promise<void> {
   const BATCH_SIZE = 1000;
   for (let i = 0; i < newMarkets.length; i += BATCH_SIZE) {
     const batch = newMarkets.slice(i, i + BATCH_SIZE);
-    await db.insert(marketPriceHistory).values(
+    await tx.insert(marketPriceHistory).values(
       batch.map((market) => ({
         marketId: market.id,
         yesPrice: market.yesPrice,
@@ -745,12 +766,13 @@ async function recordPriceHistoryFromMarkets(
 
 async function recordPriceHistoryFromUpdates(
   updates: MarketPriceUpdate[],
-  recordedAt: Date
+  recordedAt: Date,
+  tx: DbClient = db
 ): Promise<void> {
   const BATCH_SIZE = 1000;
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
     const batch = updates.slice(i, i + BATCH_SIZE);
-    await db.insert(marketPriceHistory).values(
+    await tx.insert(marketPriceHistory).values(
       batch.map((update) => ({
         marketId: update.id,
         yesPrice: update.yesPrice,

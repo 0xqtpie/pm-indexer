@@ -2,7 +2,13 @@ import { describe, test, expect, mock } from "bun:test";
 
 const seedId = crypto.randomUUID();
 
+// Import the real module to preserve exports that aren't being mocked
+const realQdrant = await import("../src/services/search/qdrant.ts");
+
 mock.module("../src/services/search/qdrant.ts", () => ({
+  // Preserve all real exports
+  ...realQdrant,
+  // Override only what this test needs
   recommendMarkets: async () => [
     {
       id: seedId,
@@ -56,12 +62,11 @@ mock.module("../src/services/search/qdrant.ts", () => ({
       category: "Rec",
     },
   ],
-  search: async () => [],
 }));
 
 describe("recommendations endpoint", () => {
   test("excludes seed market and respects fields projection", async () => {
-    const { default: app } = await import("../src/api/routes.ts");
+    const { default: app } = await import("../src/api/index.ts");
 
     const res = await app.request(
       `/api/markets/${seedId}/recommendations?limit=2&fields=id,title,score`

@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { inArray } from "drizzle-orm";
-import app from "../src/api/routes.ts";
+import app from "../src/api/index.ts";
 import { db, markets } from "../src/db/index.ts";
 
 describe("markets listing pagination", () => {

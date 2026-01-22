@@ -1,4 +1,4 @@
-import app from "./api/routes.ts";
+import app from "./api/index.ts";
 import { config } from "./config.ts";
 import { startScheduler } from "./services/scheduler/index.ts";
 import { logger } from "./logger.ts";
@@ -13,6 +13,11 @@ logger.info("Starting prediction market indexer", {
   qdrant: config.QDRANT_URL,
   autoSync: config.ENABLE_AUTO_SYNC,
 });
+
+// Warn if CORS is too permissive
+if (config.CORS_ORIGINS === "*" || config.CORS_ORIGINS === "") {
+  logger.warn("CORS configured to allow all origins - not recommended for production");
+}
 
 // Start the background sync scheduler
 startScheduler();

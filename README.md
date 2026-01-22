@@ -248,6 +248,30 @@ Response:
 }
 ```
 
+### Readiness Check
+
+Includes database and Qdrant connectivity checks:
+
+```bash
+GET /ready
+```
+
+Response (healthy):
+```json
+{
+  "status": "healthy"
+}
+```
+
+Response (unhealthy, returns 503):
+```json
+{
+  "status": "unhealthy",
+  "db": true,
+  "qdrant": false
+}
+```
+
 ### Semantic Search
 
 Search for markets using natural language. Uses vector similarity to find conceptually related markets.
@@ -464,7 +488,18 @@ pm-indexer/
 │   ├── index.ts            # Entry point (Bun.serve)
 │   ├── config.ts           # Env validation (Zod)
 │   ├── api/
-│   │   └── routes.ts       # Hono API routes
+│   │   ├── index.ts        # Main router (composes routes)
+│   │   ├── utils.ts        # Shared utilities
+│   │   ├── middleware.ts   # CORS, auth, rate limiting
+│   │   ├── schemas.ts      # Zod validation schemas
+│   │   └── routes/
+│   │       ├── health.ts   # /health, /ready, /metrics
+│   │       ├── search.ts   # /api/search, /api/suggest
+│   │       ├── markets.ts  # /api/markets CRUD
+│   │       ├── trending.ts # /api/tags, /api/categories
+│   │       ├── watchlists.ts # /api/watchlists
+│   │       ├── alerts.ts   # /api/alerts
+│   │       └── admin.ts    # /api/admin/*
 │   ├── db/
 │   │   ├── index.ts        # Drizzle client
 │   │   └── schema.ts       # Database schema

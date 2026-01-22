@@ -1,17 +1,22 @@
 import { describe, test, expect, mock } from "bun:test";
 
+// Import real modules to preserve exports that aren't being mocked
+const realEmbedding = await import("../src/services/embedding/openai.ts");
+const realQdrant = await import("../src/services/search/qdrant.ts");
+
 mock.module("../src/services/embedding/openai.ts", () => ({
-  generateQueryEmbedding: async () => [0.1, 0.2],
+  ...realEmbedding,
+  // Return a proper 1536-dimension vector to avoid Qdrant errors
+  generateQueryEmbedding: async () => Array(1536).fill(0.1),
 }));
 
-mock.module("../src/services/search/qdrant.ts", () => ({
-  search: async () => [],
-  recommendMarkets: async () => [],
-}));
+// Note: We don't mock qdrant.ts search because it affects other tests via Bun's
+// global mock behavior. The rate limit test works fine with real search - it
+// just tests that the rate limiter kicks in after N requests.
 
 describe("search rate limiting", () => {
   test("returns 429 and Retry-After when limit exceeded", async () => {
-    const { default: app } = await import("../src/api/routes.ts");
+    const { default: app } = await import("../src/api/index.ts");
     const { config } = await import("../src/config.ts");
 
     const invalidCursorRes = await app.request(

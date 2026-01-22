@@ -1,34 +1,52 @@
-import { describe, test, expect, mock } from "bun:test";
+import { describe, test, expect, mock, beforeAll, afterAll, beforeEach } from "bun:test";
 import { eq } from "drizzle-orm";
 
-let failOpenai = false;
-let failQdrant = false;
+// Global state for controlling mock behavior
+const mockState = {
+  failOpenai: false,
+  failQdrant: false,
+};
 
+// Register mocks BEFORE any imports - these must be at top level
 mock.module("../src/services/embedding/openai.ts", () => ({
   generateMarketEmbeddings: async (markets: Array<{ id: string }>) => {
-    if (failOpenai) {
+    if (mockState.failOpenai) {
       throw new Error("OpenAI down");
     }
     return new Map(markets.map((market) => [market.id, [0.1, 0.2]]));
   },
+  generateEmbedding: async () => [0.1, 0.2],
+  generateEmbeddings: async (texts: string[]) => texts.map(() => [0.1, 0.2]),
+  generateQueryEmbedding: async () => [0.1, 0.2],
+  getEmbeddingCacheStats: () => ({ hits: 0, misses: 0, size: 0 }),
   EMBEDDING_MODEL: "test-embedding-model",
 }));
 
 mock.module("../src/services/search/qdrant.ts", () => ({
   ensureCollection: async () => {
-    if (failQdrant) {
+    if (mockState.failQdrant) {
       throw new Error("Qdrant down");
     }
   },
   upsertMarkets: async () => {
-    if (failQdrant) {
+    if (mockState.failQdrant) {
       throw new Error("Qdrant down");
     }
   },
+  updateMarketPayloads: async () => {},
+  search: async () => [],
+  recommendMarkets: async () => [],
+  getCollectionInfo: async () => ({ pointsCount: 0, vectorsCount: 0 }),
+  checkQdrantHealth: async () => true,
+  COLLECTION_NAME: "test-collection",
+  qdrant: {},
 }));
 
+// Import modules AFTER mocks are registered
+import { db, jobs, markets } from "../src/db/index.ts";
+import { runJobWorkerOnce } from "../src/services/jobs/worker.ts";
+
 async function seedMarket(marketId: string) {
-  const { db, markets } = await import("../src/db/index.ts");
   await db.insert(markets).values({
     id: marketId,
     sourceId: `job-${marketId}`,
@@ -47,10 +65,13 @@ async function seedMarket(marketId: string) {
 }
 
 describe("job worker retries", () => {
-  test("requeues embed jobs when OpenAI fails", async () => {
-    const { db, jobs, markets } = await import("../src/db/index.ts");
-    const { runJobWorkerOnce } = await import("../src/services/jobs/worker.ts");
+  beforeEach(() => {
+    // Reset mock state before each test
+    mockState.failOpenai = false;
+    mockState.failQdrant = false;
+  });
 
+  test("requeues embed jobs when OpenAI fails", async () => {
     const marketId = crypto.randomUUID();
     const jobId = crypto.randomUUID();
 
@@ -64,8 +85,7 @@ describe("job worker retries", () => {
       runAt: new Date(),
     });
 
-    failOpenai = true;
-    failQdrant = false;
+    mockState.failOpenai = true;
 
     const startedAt = Date.now();
 
@@ -82,16 +102,12 @@ describe("job worker retries", () => {
       expect(jobRow?.lastError).toContain("OpenAI down");
       expect(jobRow?.runAt?.getTime()).toBeGreaterThan(startedAt);
     } finally {
-      failOpenai = false;
       await db.delete(jobs).where(eq(jobs.id, jobId));
       await db.delete(markets).where(eq(markets.id, marketId));
     }
   });
 
   test("requeues embed jobs when Qdrant fails", async () => {
-    const { db, jobs, markets } = await import("../src/db/index.ts");
-    const { runJobWorkerOnce } = await import("../src/services/jobs/worker.ts");
-
     const marketId = crypto.randomUUID();
     const jobId = crypto.randomUUID();
 
@@ -105,8 +121,7 @@ describe("job worker retries", () => {
       runAt: new Date(),
     });
 
-    failOpenai = false;
-    failQdrant = true;
+    mockState.failQdrant = true;
 
     const startedAt = Date.now();
 
@@ -123,16 +138,12 @@ describe("job worker retries", () => {
       expect(jobRow?.lastError).toContain("Qdrant down");
       expect(jobRow?.runAt?.getTime()).toBeGreaterThan(startedAt);
     } finally {
-      failQdrant = false;
       await db.delete(jobs).where(eq(jobs.id, jobId));
       await db.delete(markets).where(eq(markets.id, marketId));
     }
   });
 
   test("marks jobs succeeded on successful embed", async () => {
-    const { db, jobs, markets } = await import("../src/db/index.ts");
-    const { runJobWorkerOnce } = await import("../src/services/jobs/worker.ts");
-
     const marketId = crypto.randomUUID();
     const jobId = crypto.randomUUID();
 
@@ -146,8 +157,7 @@ describe("job worker retries", () => {
       runAt: new Date(),
     });
 
-    failOpenai = false;
-    failQdrant = false;
+    // Both mocks succeed (default state)
 
     try {
       const processed = await runJobWorkerOnce("worker-success");

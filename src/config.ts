@@ -20,10 +20,11 @@ const envSchema = z.object({
   // Admin auth
   ADMIN_API_KEY: z.string().min(1).optional(),
   ADMIN_CSRF_TOKEN: z.string().min(1).optional(),
+  TOKEN_FINGERPRINT_SECRET: z.string().min(16).optional(),
 
   // CORS
-  CORS_ORIGINS: z.string().default(""),
-  ADMIN_CORS_ORIGINS: z.string().default(""),
+  CORS_ORIGINS: z.string().default("http://localhost:3000"),
+  ADMIN_CORS_ORIGINS: z.string().default("http://localhost:3001"),
   CORS_METHODS: z.string().default("GET,POST,DELETE,OPTIONS"),
   CORS_HEADERS: z
     .string()

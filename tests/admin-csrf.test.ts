@@ -35,7 +35,7 @@ mock.module("../src/services/scheduler/index.ts", () => ({
 
 describe("admin CSRF enforcement", () => {
   test("requires CSRF token for mutating admin requests", async () => {
-    const { default: app } = await import("../src/api/routes.ts");
+    const { default: app } = await import("../src/api/index.ts");
     const { config } = await import("../src/config.ts");
 
     config.ADMIN_API_KEY = "admin-csrf-key";

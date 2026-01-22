@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test";
+import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { and, eq, gte, inArray } from "drizzle-orm";
 
 const mockSyncResult = {
@@ -28,6 +28,7 @@ const mockSyncResult = {
   status: "success",
 } as const;
 
+// Register mock BEFORE any imports that might load the scheduler
 mock.module("../src/services/scheduler/index.ts", () => ({
   triggerIncrementalSync: async () => mockSyncResult,
   triggerFullSync: async () => mockSyncResult,
@@ -36,12 +37,16 @@ mock.module("../src/services/scheduler/index.ts", () => ({
 
 describe("admin audit logging", () => {
   test("records audit logs on admin sync actions", async () => {
-    const startedAt = new Date();
-    const { default: app } = await import("../src/api/routes.ts");
+    // Use dynamic imports to ensure fresh module loading after mock
+    const { default: app } = await import("../src/api/index.ts");
     const { config } = await import("../src/config.ts");
     const { db, adminAuditLogs } = await import("../src/db/index.ts");
 
+    const startedAt = new Date();
+
     config.ADMIN_API_KEY = "admin-audit-key";
+    // Clear CSRF token to simplify test
+    config.ADMIN_CSRF_TOKEN = undefined;
 
     const res = await app.request("/api/admin/sync", {
       method: "POST",
@@ -51,6 +56,9 @@ describe("admin audit logging", () => {
     });
 
     expect(res.status).toBe(200);
+
+    // Small delay to ensure async db write completes
+    await Bun.sleep(50);
 
     const rows = await db
       .select()
@@ -65,6 +73,7 @@ describe("admin audit logging", () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0]?.status).toBe("success");
 
+    // Cleanup
     if (rows.length > 0) {
       await db
         .delete(adminAuditLogs)

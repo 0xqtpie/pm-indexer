@@ -8,8 +8,10 @@ describe("markets listing pagination", () => {
     const idA = crypto.randomUUID();
     const idB = crypto.randomUUID();
     const now = Date.now();
-    const createdOlder = new Date(now - 2 * 60 * 60 * 1000);
-    const createdNewer = new Date(now - 60 * 60 * 1000);
+    // Use future timestamps to ensure test markets sort before any seeded data
+    // (seeded markets have createdAt = sync time, which would otherwise be newer)
+    const createdOlder = new Date(now + 60 * 60 * 1000);      // 1 hour in future
+    const createdNewer = new Date(now + 2 * 60 * 60 * 1000);  // 2 hours in future
     const closeAt = new Date("0001-01-01T00:00:00.000Z");
 
     await db.insert(markets).values([

@@ -650,26 +650,26 @@ async function insertMarketsBatch(
       sourceId: market.sourceId,
       source: market.source,
       title: market.title,
-      subtitle: market.subtitle,
+      subtitle: market.subtitle ?? null,
       description: market.description,
-      rules: market.rules,
-      category: market.category,
+      rules: market.rules ?? null,
+      category: market.category ?? null,
       tags: market.tags,
       contentHash: market.contentHash,
       yesPrice: market.yesPrice,
       noPrice: market.noPrice,
-      lastPrice: market.lastPrice,
+      lastPrice: market.lastPrice ?? null,
       volume: market.volume,
       volume24h: market.volume24h,
-      liquidity: market.liquidity,
+      liquidity: market.liquidity ?? null,
       status: market.status,
-      result: market.result,
-      createdAt: market.createdAt,
-      openAt: market.openAt,
-      closeAt: market.closeAt,
-      expiresAt: market.expiresAt,
+      result: market.result ?? null,
+      createdAt: market.createdAt ?? null,
+      openAt: market.openAt ?? null,
+      closeAt: market.closeAt ?? null,
+      expiresAt: market.expiresAt ?? null,
       url: market.url,
-      imageUrl: market.imageUrl,
+      imageUrl: market.imageUrl ?? null,
       embeddingModel: EMBEDDING_MODEL,
       lastSyncedAt: syncedAt,
     }));
@@ -717,7 +717,7 @@ async function updateMarketContentBatch(
     const batch = updates.slice(i, i + BATCH_SIZE);
     const values = batch.map(
       (market) =>
-        sql`(${sql.param(market.id, markets.id)}, ${sql.param(market.title, markets.title)}, ${sql.param(market.subtitle, markets.subtitle)}, ${sql.param(market.description, markets.description)}, ${sql.param(market.rules, markets.rules)}, ${sql.param(market.category, markets.category)}, ${sql.param(market.tags, markets.tags)}, ${sql.param(market.closeAt, markets.closeAt)}, ${sql.param(market.url, markets.url)}, ${sql.param(market.imageUrl, markets.imageUrl)}, ${sql.param(market.contentHash, markets.contentHash)}, ${sql.param(EMBEDDING_MODEL, markets.embeddingModel)}, ${sql.param(syncedAt, markets.lastSyncedAt)})`
+        sql`(${sql.param(market.id, markets.id)}, ${sql.param(market.title, markets.title)}, ${sql.param(market.subtitle ?? null, markets.subtitle)}, ${sql.param(market.description, markets.description)}, ${sql.param(market.rules ?? null, markets.rules)}, ${sql.param(market.category ?? null, markets.category)}, ${sql.param(market.tags, markets.tags)}, ${sql.param(market.closeAt ?? null, markets.closeAt)}, ${sql.param(market.url, markets.url)}, ${sql.param(market.imageUrl ?? null, markets.imageUrl)}, ${sql.param(market.contentHash, markets.contentHash)}, ${sql.param(EMBEDDING_MODEL, markets.embeddingModel)}, ${sql.param(syncedAt, markets.lastSyncedAt)})`
     );
 
     await tx.execute(sql`
@@ -728,13 +728,13 @@ async function updateMarketContentBatch(
         description = v.description,
         rules = v.rules,
         category = v.category,
-        tags = v.tags,
-        close_at = v.close_at,
+        tags = v.tags::jsonb,
+        close_at = v.close_at::timestamp,
         url = v.url,
         image_url = v.image_url,
         content_hash = v.content_hash,
         embedding_model = v.embedding_model,
-        last_synced_at = v.last_synced_at
+        last_synced_at = v.last_synced_at::timestamp
       FROM (VALUES ${sql.join(values, sql`, `)})
         AS v(id, title, subtitle, description, rules, category, tags, close_at, url, image_url, content_hash, embedding_model, last_synced_at)
       WHERE m.id = v.id::uuid

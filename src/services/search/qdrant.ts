@@ -49,15 +49,15 @@ function buildMarketPayload(market: NormalizedMarket) {
     sourceId: market.sourceId,
     title: market.title,
     subtitle: market.subtitle ?? null,
-    description: market.description.slice(0, 1000), // Truncate for payload
+    description: (market.description ?? "").slice(0, 1000), // Truncate for payload
     status: market.status,
-    yesPrice: market.yesPrice,
-    noPrice: market.noPrice,
-    volume: market.volume,
-    volume24h: market.volume24h,
+    yesPrice: market.yesPrice ?? 0,
+    noPrice: market.noPrice ?? 0,
+    volume: market.volume ?? 0,
+    volume24h: market.volume24h ?? 0,
     closeAt: market.closeAt?.toISOString() ?? null,
-    url: market.url,
-    tags: market.tags,
+    url: market.url ?? "",
+    tags: market.tags ?? [],
     category: market.category ?? null,
   };
 }
@@ -67,7 +67,15 @@ export async function upsertMarkets(
   embeddings: Map<string, number[]>
 ): Promise<void> {
   const points = markets
-    .filter((m) => embeddings.has(m.id))
+    .filter((m) => {
+      const embedding = embeddings.get(m.id);
+      // Filter out markets with missing or invalid embeddings
+      return (
+        embedding &&
+        embedding.length > 0 &&
+        embedding.every((v) => typeof v === "number" && !Number.isNaN(v))
+      );
+    })
     .map((market) => ({
       id: market.id,
       vector: embeddings.get(market.id)!,

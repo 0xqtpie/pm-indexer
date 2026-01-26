@@ -8,7 +8,7 @@ const mockState = {
 };
 
 // Register mocks BEFORE any imports - these must be at top level
-mock.module("../src/services/embedding/openai.ts", () => ({
+mock.module("../src/services/embedding/openrouter.ts", () => ({
   generateMarketEmbeddings: async (markets: Array<{ id: string }>) => {
     if (mockState.failOpenai) {
       throw new Error("OpenAI down");

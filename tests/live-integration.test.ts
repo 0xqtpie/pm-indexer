@@ -20,13 +20,13 @@ describe("live integrations (opt-in)", () => {
     }
   });
 
-  liveTest("reaches OpenAI embeddings and Qdrant", async () => {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is required for live tests");
+  liveTest("reaches OpenRouter embeddings and Qdrant", async () => {
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is required for live tests");
     }
 
     const { generateEmbedding } = await import(
-      "../src/services/embedding/openai.ts"
+      "../src/services/embedding/openrouter.ts"
     );
     const { ensureCollection, getCollectionInfo, search } = await import(
       "../src/services/search/qdrant.ts"

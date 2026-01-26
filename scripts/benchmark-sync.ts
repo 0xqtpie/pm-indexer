@@ -1,15 +1,18 @@
-const MARKET_FETCH_LIMIT = 50000;
-
 // Set env vars BEFORE importing config
+const MARKET_FETCH_LIMIT = 64000;
 process.env.MARKET_FETCH_LIMIT = String(MARKET_FETCH_LIMIT);
-process.env.EXCLUDE_SPORTS = "false";
+process.env.EXCLUDE_SPORTS = "false";  // Include sports markets
 
 const { fullSync } = await import("../src/services/sync/index.ts");
+const { config } = await import("../src/config.ts");
 
 console.log("=".repeat(60));
-console.log("SYNC BENCHMARK");
+console.log("SYNC BENCHMARK (FULL - ALL MARKETS)");
 console.log("=".repeat(60));
-console.log(`Market fetch limit: ${MARKET_FETCH_LIMIT}`);
+console.log(`Market fetch limit: ${MARKET_FETCH_LIMIT} (effectively unlimited)`);
+console.log(`Exclude sports: ${config.EXCLUDE_SPORTS}`);
+console.log(`Embedding model: ${config.EMBEDDING_MODEL}`);
+console.log(`Embedding dimensions: ${config.EMBEDDING_DIMENSIONS}`);
 console.log(`Started at: ${new Date().toISOString()}`);
 console.log("");
 

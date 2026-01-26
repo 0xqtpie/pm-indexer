@@ -1,6 +1,6 @@
 # Prediction Market Indexer
 
-A semantic search engine for prediction markets. Ingests market data from Polymarket and Kalshi, generates embeddings using OpenAI, stores them in Qdrant vector database, and provides a REST API for semantic search.
+A semantic search engine for prediction markets. Ingests market data from Polymarket and Kalshi, generates embeddings via OpenRouter (supporting multiple providers), stores them in Qdrant vector database, and provides a REST API for semantic search.
 
 Search for concepts like "cryptocurrency" and find related markets about Bitcoin, even if the exact words don't match.
 
@@ -16,7 +16,7 @@ Search for concepts like "cryptocurrency" and find related markets about Bitcoin
 │                         Core Services                          │
 │  ┌─────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
 │  │   Ingestion │  │  Embedding Svc   │  │   Search Svc     │  │
-│  │   Service   │  │  (OpenAI)        │  │   (Qdrant)       │  │
+│  │   Service   │  │  (OpenRouter)    │  │   (Qdrant)       │  │
 │  └─────────────┘  └──────────────────┘  └──────────────────┘  │
 └───────────────────────────────────────────────────────────────┘
                                 │
@@ -41,7 +41,7 @@ Search for concepts like "cryptocurrency" and find related markets about Bitcoin
 
 - [Bun](https://bun.sh) v1.0+ (JavaScript runtime)
 - [Docker](https://docker.com) & Docker Compose
-- [OpenAI API Key](https://platform.openai.com/api-keys)
+- [OpenRouter API Key](https://openrouter.ai/keys)
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ bun install
 
 ### 2. Configure Environment
 
-Copy the example environment file and add your OpenAI API key:
+Copy the example environment file and add your OpenRouter API key:
 
 ```bash
 cp .env.example .env
@@ -66,7 +66,9 @@ Edit `.env`:
 ```bash
 DATABASE_URL=postgres://user:pass@localhost:5432/markets
 QDRANT_URL=http://localhost:6333
-OPENAI_API_KEY=sk-your-key-here  # Required!
+OPENROUTER_API_KEY=sk-or-your-key-here  # Required!
+EMBEDDING_MODEL=openai/text-embedding-3-small  # Or text-embedding-3-large
+EMBEDDING_DIMENSIONS=1536  # 0 = use model default
 ADMIN_API_KEY=your-admin-key     # Required for /api/admin/* and /metrics
 ADMIN_CSRF_TOKEN=your-csrf-token # Optional; required for mutating admin calls if set
 CORS_ORIGINS=*                   # Comma-separated list of allowed origins
@@ -125,7 +127,7 @@ bun run scripts/seed.ts
 This will:
 - Fetch ~200 markets from each platform
 - Normalize them to a common schema
-- Generate OpenAI embeddings (text-embedding-3-small)
+- Generate embeddings via OpenRouter (default: text-embedding-3-small)
 - Store vectors in Qdrant
 - Save market data to PostgreSQL
 
@@ -142,8 +144,8 @@ The API will be available at `http://localhost:3000`.
 Build and run everything with Docker Compose:
 
 ```bash
-# Set your OpenAI API key
-export OPENAI_API_KEY=sk-your-key-here
+# Set your OpenRouter API key
+export OPENROUTER_API_KEY=sk-or-your-key-here
 
 # Build and start all services
 docker compose up -d
@@ -505,7 +507,7 @@ pm-indexer/
 │   │   └── schema.ts       # Database schema
 │   ├── services/
 │   │   ├── embedding/
-│   │   │   └── openai.ts   # OpenAI embeddings
+│   │   │   └── openrouter.ts # Embeddings via OpenRouter
 │   │   ├── ingestion/
 │   │   │   ├── polymarket.ts
 │   │   │   ├── kalshi.ts
@@ -568,7 +570,7 @@ bun run scripts/test-ingestion.ts
 Notes:
 - Some tests hit Postgres and expect a working `DATABASE_URL`.
 - `tests/search.test.ts` and `tests/qdrant-init.test.ts` require Qdrant (and seeded vectors for the search suite).
-- Opt-in live integrations are in `tests/live-integration.test.ts` and run with `RUN_LIVE_TESTS=true` (requires OpenAI + Qdrant + network access).
+- Opt-in live integrations are in `tests/live-integration.test.ts` and run with `RUN_LIVE_TESTS=true` (requires OpenRouter + Qdrant + network access).
 
 ### Database Management
 
@@ -615,7 +617,7 @@ Qdrant dashboard: http://localhost:6333/dashboard
 | Database | PostgreSQL | Market data storage |
 | ORM | Drizzle | Type-safe database queries |
 | Vector DB | Qdrant | Embedding storage & similarity search |
-| Embeddings | OpenAI | text-embedding-3-small (1536 dims) |
+| Embeddings | OpenRouter | Multiple providers (default: text-embedding-3-small) |
 | Validation | Zod | Runtime type validation |
 | HTTP Client | ky | Fetch wrapper with retries |
 
@@ -655,7 +657,7 @@ curl http://localhost:6333/health
 
 ### "Invalid API key"
 
-Check your `.env` file has a valid `OPENAI_API_KEY`.
+Check your `.env` file has a valid `OPENROUTER_API_KEY`.
 
 ### "No markets found"
 

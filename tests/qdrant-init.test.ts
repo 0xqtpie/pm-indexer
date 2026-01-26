@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { search } from "../src/services/search/qdrant.ts";
-import { EMBEDDING_DIMENSIONS } from "../src/services/embedding/openai.ts";
+import { EMBEDDING_DIMENSIONS } from "../src/services/embedding/openrouter.ts";
 
 describe("Qdrant initialization", () => {
   test("search ensures collection exists", async () => {

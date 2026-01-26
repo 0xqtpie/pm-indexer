@@ -1,4 +1,4 @@
-import { getEmbeddingCacheStats } from "./services/embedding/openai.ts";
+import { getEmbeddingCacheStats } from "./services/embedding/openrouter.ts";
 
 export type SyncType = "incremental" | "full";
 export type ExternalApiSource = "polymarket" | "kalshi";

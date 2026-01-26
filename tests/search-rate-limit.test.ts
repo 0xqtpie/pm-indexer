@@ -1,10 +1,10 @@
 import { describe, test, expect, mock } from "bun:test";
 
 // Import real modules to preserve exports that aren't being mocked
-const realEmbedding = await import("../src/services/embedding/openai.ts");
+const realEmbedding = await import("../src/services/embedding/openrouter.ts");
 const realQdrant = await import("../src/services/search/qdrant.ts");
 
-mock.module("../src/services/embedding/openai.ts", () => ({
+mock.module("../src/services/embedding/openrouter.ts", () => ({
   ...realEmbedding,
   // Return a proper 1536-dimension vector to avoid Qdrant errors
   generateQueryEmbedding: async () => Array(1536).fill(0.1),

@@ -25,7 +25,7 @@ import {
   marketPriceHistory,
 } from "../db/index.ts";
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
-import { generateQueryEmbedding } from "../services/embedding/openai.ts";
+import { generateQueryEmbedding } from "../services/embedding/openrouter.ts";
 import { recommendMarkets, search } from "../services/search/qdrant.ts";
 import { getSyncStatus, SyncRunError } from "../services/sync/index.ts";
 import { decodeCursor, encodeCursor } from "./pagination.ts";

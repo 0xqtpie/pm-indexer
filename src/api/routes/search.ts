@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { desc, ilike } from "drizzle-orm";
 import { searchQuerySchema, suggestQuerySchema } from "../schemas.ts";
 import { db, markets } from "../../db/index.ts";
-import { generateQueryEmbedding } from "../../services/embedding/openai.ts";
+import { generateQueryEmbedding } from "../../services/embedding/openrouter.ts";
 import { search } from "../../services/search/qdrant.ts";
 import { decodeCursor, encodeCursor } from "../pagination.ts";
 import { logger } from "../../logger.ts";

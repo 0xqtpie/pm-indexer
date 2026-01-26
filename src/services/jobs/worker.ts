@@ -1,7 +1,7 @@
 import { sql, inArray } from "drizzle-orm";
 import { db, jobs, markets } from "../../db/index.ts";
 import { ensureCollection, upsertMarkets } from "../search/qdrant.ts";
-import { generateMarketEmbeddings, EMBEDDING_MODEL } from "../embedding/openai.ts";
+import { generateMarketEmbeddings, EMBEDDING_MODEL } from "../embedding/openrouter.ts";
 import type { Market, Job } from "../../db/schema.ts";
 import type { NormalizedMarket } from "../../types/market.ts";
 import { logger } from "../../logger.ts";

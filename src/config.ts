@@ -7,8 +7,10 @@ const envSchema = z.object({
   // Vector Database
   QDRANT_URL: z.string().url().default("http://localhost:6333"),
 
-  // OpenAI
-  OPENAI_API_KEY: z.string().min(1),
+  // Embeddings (OpenRouter)
+  OPENROUTER_API_KEY: z.string().min(1),
+  EMBEDDING_MODEL: z.string().default("openai/text-embedding-3-small"),
+  EMBEDDING_DIMENSIONS: z.coerce.number().int().nonnegative().default(1536),  // 0 = use model default
 
   // Sync settings
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().positive().default(30),

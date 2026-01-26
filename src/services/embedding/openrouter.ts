@@ -3,12 +3,14 @@ import { config } from "../../config.ts";
 import type { NormalizedMarket } from "../../types/market.ts";
 import { buildEmbeddingText } from "../../types/market.ts";
 
-const openai = new OpenAI({
-  apiKey: config.OPENAI_API_KEY,
+// OpenRouter provides access to multiple embedding providers via OpenAI-compatible API
+const openrouter = new OpenAI({
+  apiKey: config.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
 });
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMENSIONS = 1536;
+const EMBEDDING_MODEL = config.EMBEDDING_MODEL;
+const EMBEDDING_DIMENSIONS = config.EMBEDDING_DIMENSIONS;
 const BATCH_SIZE = 100;
 
 type CachedEmbedding = {
@@ -21,12 +23,16 @@ let cacheHits = 0;
 let cacheMisses = 0;
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  // Only include dimensions if specified (text-embedding-3 models support it, ada-002 doesn't)
+  const params: { model: string; input: string; dimensions?: number } = {
     model: EMBEDDING_MODEL,
     input: text,
-    dimensions: EMBEDDING_DIMENSIONS,
-  });
+  };
+  if (EMBEDDING_DIMENSIONS > 0) {
+    params.dimensions = EMBEDDING_DIMENSIONS;
+  }
 
+  const response = await openrouter.embeddings.create(params);
   return response.data[0]?.embedding ?? [];
 }
 
@@ -115,13 +121,17 @@ async function processBatch(
   batch: string[],
   batchIndex: number
 ): Promise<{ index: number; embeddings: number[][] }> {
-  const response = await openai.embeddings.create({
+  const params: { model: string; input: string[]; dimensions?: number } = {
     model: EMBEDDING_MODEL,
     input: batch,
-    dimensions: EMBEDDING_DIMENSIONS,
-  });
+  };
+  if (EMBEDDING_DIMENSIONS > 0) {
+    params.dimensions = EMBEDDING_DIMENSIONS;
+  }
 
-  // Sort by index to ensure correct order (OpenAI may return out of order)
+  const response = await openrouter.embeddings.create(params);
+
+  // Sort by index to ensure correct order (API may return out of order)
   const sorted = [...response.data].sort((a, b) => a.index - b.index);
 
   return {

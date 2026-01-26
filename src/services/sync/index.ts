@@ -28,7 +28,7 @@ import {
 import {
   generateMarketEmbeddings,
   EMBEDDING_MODEL,
-} from "../embedding/openai.ts";
+} from "../embedding/openrouter.ts";
 import {
   ensureCollection,
   upsertMarkets,

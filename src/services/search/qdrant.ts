@@ -1,7 +1,7 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { config } from "../../config.ts";
 import type { NormalizedMarket } from "../../types/market.ts";
-import { EMBEDDING_DIMENSIONS } from "../embedding/openai.ts";
+import { EMBEDDING_DIMENSIONS } from "../embedding/openrouter.ts";
 import { logger } from "../../logger.ts";
 import { withRetry } from "./qdrant-retry.ts";
 

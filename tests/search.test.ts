@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll } from "bun:test";
-import { generateEmbedding } from "../src/services/embedding/openai.ts";
+import { generateEmbedding } from "../src/services/embedding/openrouter.ts";
 import {
   search,
   getCollectionInfo,
